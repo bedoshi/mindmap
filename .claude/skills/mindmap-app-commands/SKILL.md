@@ -35,4 +35,19 @@ npm run package         # build:electron のあと electron-builder でインス
 npx tsc -b   # tsconfig.app.json / tsconfig.node.json / tsconfig.electron.json をまとめて検査
 ```
 
-単体テストのコマンドはまだ存在しない（テストランナー未導入）。
+## 単体テスト（Vitest）
+
+```bash
+npm test               # vitest をウォッチモードで起動
+npm run test:run       # 全テストを 1 回実行（CI 向け）
+npm run test:coverage  # カバレッジ付きで実行 → coverage/
+npx vitest run src/model   # パスを指定して一部だけ実行
+```
+
+- テストファイルは対象と同じディレクトリの `対象名.test.ts(x)`。`src/**` と `electron/**` が対象。
+- 既定の環境は jsdom。Node 専用のテスト（`electron/`）はファイル先頭に `// @vitest-environment node` を書く。
+- 実行時に Node が `--localstorage-file was provided without a valid path` という警告を出すが、Vitest が Node 側の localStorage を無効化するために付けているフラグによるもので、テスト結果には影響しない。
+
+## 変更前後の確認
+
+コードを変更したら `npm run lint` → `npx tsc -b` → `npm run test:run` → 必要に応じて `npm run build` / `npm run build:electron` の順で確認する。

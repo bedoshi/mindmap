@@ -9,7 +9,8 @@ description: このリポジトリ（マインドマップ Web アプリ / Elect
 - 同じ `index.html` / `src/` を **Web 版**（`vite.config.ts`）と **Electron 版**（`electron.vite.config.ts`）の両方で使う。Electron 固有のコードは `electron/` に置き、レンダラー側は `window.mindmapApi` の有無で保存先を切り替えるだけにしている。
 - Lintは ESLint ではなく **oxlint** を使用（`.oxlintrc.json` で設定）。ESLint系のプラグインは使えないため、lintルールを追加する場合はoxlintの設定方法に従うこと。
 - TypeScript設定は `tsconfig.json` から `tsconfig.app.json`（レンダラー / アプリコード用）、`tsconfig.node.json`（Vite 設定など node 側コード用）、`tsconfig.electron.json`（`electron/` 用。Node 型のみで DOM 型なし）を参照する分割構成。`tsc -b` で 3 つまとめて検査する。
-- 実行時の依存パッケージは React のみ。Electron 関連（`electron` / `electron-vite` / `electron-builder`）は devDependencies。状態管理ライブラリや描画ライブラリは使っていない。
+- 実行時の依存パッケージは React のみ。Electron 関連（`electron` / `electron-vite` / `electron-builder`）とテスト関連（`vitest` / `jsdom` / `@testing-library/*`）は devDependencies。状態管理ライブラリや描画ライブラリは使っていない。
+- 単体テストは **Vitest**（`vitest.config.ts`）。テストファイルは対象と同じディレクトリに `対象名.test.ts(x)` で置く（詳細は「テスト」の節）。
 
 ## ディレクトリ構成
 
@@ -18,12 +19,17 @@ index.html                 Web 版・Electron 版共通のエントリ HTML
 vite.config.ts             Web 版の Vite 設定
 electron.vite.config.ts    Electron 版の electron-vite 設定（main / preload / renderer）
 electron-builder.yml       インストーラ作成（electron-builder）の設定
+vitest.config.ts           単体テストの設定（jsdom 環境、setup ファイル、カバレッジ対象）
 electron/
   main.ts                  メインプロセス: ウィンドウ生成、メニュー、IPC ハンドラ登録
   preload.ts               contextBridge で window.mindmapApi を公開
   mapFiles.ts              保存ディレクトリの解決と maps/<id>.xml の読み書き（IPC ハンドラ本体）
+  mapFiles.test.ts         ↑のテスト（Node 環境）
   menu.ts                  アプリケーションメニュー（ズーム系ショートカットを除いた最小構成）
 src/
+  test/
+    setup.ts               テスト共通の準備（jest-dom、jsdom に無い API の補完、後片付け）
+  （各ディレクトリ）        対象と同じ場所に *.test.ts / *.test.tsx を置く
   main.tsx                 エントリーポイント
   App.tsx                  保存先の生成、useMapLibrary の呼び出し、MindMapEditor の描画
   App.css                  エディタ・ノード・ツールバー・マップ一覧パネルのスタイル
@@ -107,3 +113,19 @@ src/
 - ドロップ先の判定は `document.elementFromPoint` で `[data-node-id]` を探す。ゴースト要素は `pointer-events: none`。
 - ホイールイベントは `preventDefault` が必要なため React の `onWheel` ではなく `addEventListener('wheel', ..., { passive: false })` で登録している。
 - キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。
+
+## テスト
+
+- ランナーは Vitest 4 系、DOM 環境は jsdom、コンポーネントは `@testing-library/react` + `@testing-library/user-event` + `@testing-library/jest-dom`。`globals: false` なので `describe` / `it` / `expect` / `vi` は `vitest` から import する。
+- `react-ts-test-lint-rules` スキルとの差分: HTTP 通信が無いため MSW は入れていない。Lint は oxlint のままで ESLint / Prettier は導入していない。カバレッジの閾値も設定していない（`npm run test:coverage` で確認はできる）。
+- 共通準備は `src/test/setup.ts`。次の補完をしている。
+  - Node 22 以降のグローバル `localStorage`（`--localstorage-file` 無しでは使えない）をメモリ上の Storage に差し替える。
+  - jsdom に無い Pointer Capture（`setPointerCapture` など）をモックにする。`MindMapEditor` のポインタ処理がこれを呼ぶため。
+  - `HTMLCanvasElement.prototype.getContext` を null を返すモックにする。`layout.ts` のテキスト幅計測はフォールバック（文字数 × 固定幅）になる。
+  - 各テスト後に `cleanup()` と `localStorage.clear()` を行う。
+- `electron/` のテストは Node 環境で動かす（ファイル先頭の `// @vitest-environment node`）。setup ファイルは `document` の有無で DOM 向けの処理をスキップする。
+- テストの書き方の方針:
+  - 純粋関数（`model/`、`storage/xml.ts`）は入出力で検証する。「変更が無ければ同じ参照を返す」という約束も `toBe` で検証している。
+  - hook は `renderHook` + `act`。`useMapLibrary` は `MapStorage` をメモリ実装のテストダブルに差し替えて検証する。デバウンス保存は実時間で待つ（`waitFor` の timeout を延長）。
+  - `MindMapEditor` は `MapLibrary` 型のモックを渡し、キーボード操作（Tab / Enter / Delete / Ctrl+S）とツールバー・一覧パネルの操作をユーザー視点で検証する。ノードのドラッグは jsdom に `elementFromPoint` が無いためテストしていない。
+  - Electron のメインプロセス（`main.ts` / `menu.ts` / `preload.ts`）は Electron 本体に依存するためテスト対象外。ファイル入出力（`mapFiles.ts`）は一時ディレクトリと `MINDMAP_DATA_DIR` で検証する。

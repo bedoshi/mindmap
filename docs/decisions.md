@@ -60,7 +60,7 @@
 
 ### D-09 Lint は oxlint、テストランナーは未導入
 
-- **決定**: Lint は ESLint ではなく oxlint を使う（スキャフォルディング時の選択を踏襲）。単体テストはまだ導入していない。
+- **決定**: Lint は ESLint ではなく oxlint を使う（スキャフォルディング時の選択を踏襲）。単体テストはまだ導入していない。→ 変更: テストランナーは D-12 で Vitest を導入した。
 - **補足**: 後から追加された汎用スキル `react-ts-test-lint-rules` は Vitest / ESLint / Prettier を前提にしている。導入する場合は依存パッケージの追加になるため、独立したコミットで行う（CLAUDE.md のコミットルール参照）。
 
 ### D-10 汎用の React + TypeScript 規約スキルと既存構成の差分は未解決
@@ -77,3 +77,14 @@
 
 - **決定**: 機能仕様は `docs/spec.md`、方針決定の経緯はこの `docs/decisions.md`、実装構成は `.claude/skills/mindmap-app-architecture/SKILL.md`、コマンドは `.claude/skills/mindmap-app-commands/SKILL.md` に書く。`readme.md` は概要と各ドキュメントへのリンクに留める。
 - **経緯**: 「ここまでのやり取りの情報を CLAUDE.md または仕様面については docs 配下にまとめてほしい」という要望による。それまでは `readme.md` に仕様を書いていた。
+
+### D-12 単体テストに Vitest + Testing Library を導入する
+
+- **決定**: テストランナーは Vitest（4 系）、DOM 環境は jsdom、コンポーネントテストは Testing Library（react / user-event / jest-dom）。テストファイルは対象と同じディレクトリに `対象名.test.ts(x)` で置く。
+- **経緯**: 「unit test code を追加したい」という要望による。`react-ts-test-lint-rules` スキルの前提に合わせた。
+- **スキルとの差分**:
+  - HTTP 通信が無いため MSW は導入しない。
+  - Lint は oxlint のまま（D-09）。ESLint / Prettier への移行は D-10 の構成移行と合わせて判断する。
+  - カバレッジの閾値は設定しない（数値を満たすためのテストを書かないため）。
+  - Vitest は npm の依存解決で 4.1 系が入った（最新は 5 系）。4 系は Vite 8 に対応しており、スキルの前提とも一致するためそのまま使う。
+- **影響**: `src/test/setup.ts` で jsdom に無い API（Pointer Capture、Canvas の getContext）と Node 側の localStorage を補っている。Electron のメインプロセス本体はテスト対象外とし、ファイル入出力だけを Node 環境で検証する。

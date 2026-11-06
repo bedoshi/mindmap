@@ -26,3 +26,4 @@ npm run dev:electron   # Electron 版を開発モードで起動
 ```
 
 本番ビルドは `npm run build`（Web 版 → `dist/`）、`npm run build:electron`（Electron 版 → `out/`）。
+単体テストは `npm run test:run`（Vitest）。
