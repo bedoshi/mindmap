@@ -1,184 +1,428 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-}
-
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
-}
-
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
-}
-
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
-}
-
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
-}
-
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
-}
-
-.ticks {
+.editor {
   position: relative;
   width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
+/* ---- キャンバス ---- */
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
+.canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.canvas:active {
+  cursor: grabbing;
+}
+
+.canvas.dragging-node {
+  cursor: move;
+}
+
+.viewport {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.edges path {
+  stroke-linecap: round;
+}
+
+/* ---- ノード ---- */
+
+.node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border-radius: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition:
+    left 0.15s ease,
+    top 0.15s ease,
+    box-shadow 0.1s ease;
+}
+
+.node.depth-0 {
+  background: #2d3748;
+  color: #fff;
+  border-radius: 24px;
+}
+
+.node.depth-1 {
+  background: var(--branch-color);
+  color: #fff;
+}
+
+.node.depth-2 {
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--branch-color);
+  /* 枠線の分だけ内側の余白を減らし、レイアウト計算上の幅とテキスト幅を一致させる */
+  padding: 0 12px;
+}
+
+.node.selected {
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 0 0 2px var(--accent),
+    var(--shadow);
+}
+
+.node.editing {
+  transition: none;
+  cursor: text;
+}
+
+.node.dragging {
+  opacity: 0.4;
+}
+
+.node.drop-target {
+  box-shadow:
+    0 0 0 4px rgba(34, 197, 94, 0.35),
+    0 0 0 2px #22c55e,
+    var(--shadow);
+}
+
+.node-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-text.placeholder {
+  opacity: 0.6;
+}
+
+.node-input {
+  width: 100%;
+  min-width: 32px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.collapse-btn {
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 2px solid var(--branch-color);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font: 11px/1 var(--sans);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.node:hover .collapse-btn,
+.node.collapsed .collapse-btn {
+  opacity: 1;
+}
+
+.node.side-right .collapse-btn {
+  right: -12px;
+}
+
+.node.side-left .collapse-btn {
+  left: -12px;
+}
+
+/* ---- ドラッグ中のゴースト ---- */
+
+.drag-ghost {
+  position: absolute;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  opacity: 0.85;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(12px, 12px);
+}
+
+/* ---- ツールバーなどのオーバーレイ ---- */
+
+.toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.toolbar button {
+  min-width: 32px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toolbar button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zoom-label {
+  min-width: 44px;
+  text-align: center;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.help {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 10;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.message {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.toolbar button.active {
+  background: var(--accent-soft);
+}
+
+.save-state {
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.save-state-dirty {
+  color: #d97706;
+}
+
+.save-state-error {
+  color: #dc2626;
+}
+
+/* ---- マップ一覧パネル ---- */
+
+.map-panel {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  bottom: 48px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100% - 24px));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.map-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.map-panel-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.map-panel-header button,
+.map-delete {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.map-panel-header button:hover,
+.map-delete:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.map-panel-create {
+  margin: 10px 12px 4px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.map-panel-create:hover {
+  background: var(--accent-soft);
+}
+
+.map-list {
+  flex: 1;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.map-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+
+.map-list li.current {
+  background: var(--accent-soft);
+}
+
+.map-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-list li:not(.current) .map-item:hover {
+  background: var(--bg);
+}
+
+.map-title {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-updated {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.map-panel-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.map-panel-footer code {
+  display: block;
+  word-break: break-all;
+  color: var(--text);
+  font-size: 11px;
+}
+
+/* ---- 起動時・エラー時の全画面メッセージ ---- */
+
+.screen-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.screen-message .error {
+  color: #dc2626;
+}
+
+.screen-message button {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }

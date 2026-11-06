@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-マインドマップのWebアプリケーション。フロントエンドは React + Vite + TypeScript で実装する（`readme.md` 参照）。現時点ではバックエンドはなく、Viteの `react-ts` テンプレートで生成したフロントエンドのみの構成。
+MindMeister 風のマインドマップ Web アプリケーション。フロントエンドは React + Vite + TypeScript で実装する。バックエンドはなく、マップはブラウザの localStorage に XML 形式で保存する（機能仕様は `docs/spec.md` 参照）。
 
 ## 詳細情報（Skill）
 
@@ -20,11 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ソースコードや仕様に変更があった場合は、必ず関連するドキュメントも同じコミット内で更新すること。
 
-- 機能・仕様（何を作るか、どう動くべきか）に関わる変更 → `readme.md` を更新する。
+- 機能・仕様（何を作るか、どう動くべきか）に関わる変更 → `docs/spec.md` を更新する。`readme.md` は概要とリンクのみなので、提供形態や前提が変わったときだけ更新する。
 - アーキテクチャ・構成・使用コマンド（どう実装されているか、どう開発するか）に関わる変更 → `CLAUDE.md` または該当する `.claude/skills/**/SKILL.md` を更新する。
 - どちらに書くべきか迷う場合は両方を確認し、必要な方（または両方）を更新する。
 - ドキュメントを更新せずにコードや仕様だけを変更した状態でタスクを完了としないこと。
-- ドキュメント（`readme.md` / `CLAUDE.md` / `.claude/skills/**/SKILL.md` を含む）は日本語で記載すること。
+- ドキュメント（`readme.md` / `docs/**` / `CLAUDE.md` / `.claude/skills/**/SKILL.md` を含む）は日本語で記載すること。
 
 ## コミットルール
 
