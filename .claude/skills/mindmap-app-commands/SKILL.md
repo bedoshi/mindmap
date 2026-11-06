@@ -29,6 +29,18 @@ npm run package         # build:electron のあと electron-builder でインス
 - 保存先ディレクトリを変えたいときは環境変数 `MINDMAP_DATA_DIR` を設定して起動する（例: `$env:MINDMAP_DATA_DIR = "C:\tmp\mindmap-test"; npx electron .`）。
 - `npm run package` はプラットフォームごとのツールをダウンロードするため、初回は時間がかかる。Windows では管理者権限またはシンボリックリンク作成権限が必要になる場合がある。
 
+## リリース（GitHub Releases）
+
+```bash
+# package.json の version を更新してコミットしたあと、v<version> のタグを push する
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+- `.github/workflows/release.yml` が `v*` タグの push で起動し、Windows 上で lint・型チェック・テスト → `build:electron` → `electron-builder --publish never` を実行して、`release/` 内の `*.exe`・`*.exe.blockmap`・`latest.yml` を GitHub Release に添付する。
+- 対象は Windows（NSIS インストーラ）のみ。macOS / Linux 向けは未対応。
+- タグ名と `package.json` の `version` は自動では連動しない。インストーラのファイル名は `version` で決まるので、タグを打つ前に揃えておく。
+
 ## 型チェックだけ行う
 
 ```bash

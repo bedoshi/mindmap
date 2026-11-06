@@ -1,0 +1,43 @@
+name: Release
+
+# v* タグの push で Windows 版インストーラをビルドし、GitHub Release に添付する
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint / 型チェック / テスト
+        run: |
+          npm run lint
+          npx tsc -b
+          npm run test:run
+
+      # build:electron のあと electron-builder を実行する。公開は下の gh release で行うので publish は無効にする
+      - run: npm run build:electron
+      - run: npx electron-builder --publish never
+
+      - name: GitHub Release を作成してインストーラを添付
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            release/*.exe release/*.exe.blockmap release/latest.yml

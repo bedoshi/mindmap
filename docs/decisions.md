@@ -88,3 +88,9 @@
   - カバレッジの閾値は設定しない（数値を満たすためのテストを書かないため）。
   - Vitest は npm の依存解決で 4.1 系が入った（最新は 5 系）。4 系は Vite 8 に対応しており、スキルの前提とも一致するためそのまま使う。
 - **影響**: `src/test/setup.ts` で jsdom に無い API（Pointer Capture、Canvas の getContext）と Node 側の localStorage を補っている。Electron のメインプロセス本体はテスト対象外とし、ファイル入出力だけを Node 環境で検証する。
+
+### D-13 リリースは GitHub Actions で Windows 版インストーラを GitHub Releases に公開する
+
+- **決定**: `v*` タグの push をきっかけに `.github/workflows/release.yml` が Windows 上でビルドし、`gh release create` で NSIS インストーラ（`.exe`）・`.blockmap`・`latest.yml` を Release に添付する。電子署名と自動アップデートは扱わない。
+- **経緯**: 「リポジトリ上でリリースを作成し、electron の .exe ファイル等をダウンロードできる形にしたい」という要望による。手元の exe を手動アップロードする方法と比べ、再現性のある環境でビルドできるためワークフローを選んだ。
+- **補足**: 対象は Windows のみ（macOS / Linux は未検証）。ワークフローは公開前に lint・型チェック・テストを通す。`electron-builder` の自動公開は `--publish never` で止め、公開は `gh release create` に一本化している。
