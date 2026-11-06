@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `mindmap-app-commands` — ビルド・開発サーバー・lintなどのコマンド
 - `mindmap-app-architecture` — ディレクトリ構成・技術的な決定事項
+- `react-ts-test-lint-rules` — テストコード（Vitest / Testing Library / MSW）の書き方と ESLint / Prettier の設定ルール
 
 ## ドキュメント更新ルール
 
