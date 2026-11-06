@@ -132,6 +132,18 @@ export function removeNode(map: MindMap, id: NodeId): MindMap {
   return { ...map, nodes }
 }
 
+/**
+ * id を削除した後に選択するノードを返す。
+ * 直前（上）の兄弟 → 直後（下）の兄弟 → 親 の順に探す。ルートや存在しない id は null
+ */
+export function nodeToSelectAfterRemove(map: MindMap, id: NodeId): NodeId | null {
+  const node = map.nodes[id]
+  if (!node || node.parentId === null) return null
+  const siblings = map.nodes[node.parentId].children
+  const index = siblings.indexOf(id)
+  return siblings[index - 1] ?? siblings[index + 1] ?? node.parentId
+}
+
 export function toggleCollapse(map: MindMap, id: NodeId): MindMap {
   const node = map.nodes[id]
   if (!node || node.children.length === 0) return map

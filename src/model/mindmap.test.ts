@@ -7,6 +7,7 @@ import {
   createMindMap,
   isDescendant,
   moveNode,
+  nodeToSelectAfterRemove,
   removeNode,
   toggleCollapse,
   updateText,
@@ -143,6 +144,37 @@ describe('removeNode', () => {
     const { map, rootId } = buildMap()
 
     expect(removeNode(map, rootId)).toBe(map)
+  })
+})
+
+describe('nodeToSelectAfterRemove', () => {
+  it('上の兄弟がいればそれを返す', () => {
+    const { map } = buildMap()
+
+    expect(nodeToSelectAfterRemove(map, 'a2')).toBe('a1')
+    expect(nodeToSelectAfterRemove(map, 'b')).toBe('a')
+  })
+
+  it('上の兄弟がいなければ下の兄弟を返す', () => {
+    const { map } = buildMap()
+
+    expect(nodeToSelectAfterRemove(map, 'a1')).toBe('a2')
+    expect(nodeToSelectAfterRemove(map, 'a')).toBe('b')
+  })
+
+  it('兄弟がいなければ親を返す', () => {
+    const { map, rootId } = buildMap()
+    const only = removeNode(map, 'a2')
+
+    expect(nodeToSelectAfterRemove(only, 'a1')).toBe('a')
+    expect(nodeToSelectAfterRemove(createMindMap('x'), rootId)).toBeNull()
+  })
+
+  it('ルートや存在しない id は null を返す', () => {
+    const { map, rootId } = buildMap()
+
+    expect(nodeToSelectAfterRemove(map, rootId)).toBeNull()
+    expect(nodeToSelectAfterRemove(map, 'nothing')).toBeNull()
   })
 })
 

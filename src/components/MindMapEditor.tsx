@@ -11,7 +11,14 @@ import {
 import type { MapLibrary } from '../hooks/useMapLibrary'
 import { useMindMap } from '../hooks/useMindMap'
 import { computeLayout } from '../model/layout'
-import { countSubtree, isDescendant, newId, updateText, visibleChildren } from '../model/mindmap'
+import {
+  countSubtree,
+  isDescendant,
+  newId,
+  nodeToSelectAfterRemove,
+  updateText,
+  visibleChildren,
+} from '../model/mindmap'
 import type { MindMap, NodeId } from '../model/types'
 import { XML_FILE_EXTENSION, mindMapToXml, titleOf, xmlToMindMap } from '../storage/xml'
 import { MapListPanel } from './MapListPanel'
@@ -181,8 +188,9 @@ export function MindMapEditor({ initialMap, library }: Props) {
     if (selected === null) return
     const node = map.nodes[selected]
     if (node.parentId === null) return
+    const next = nodeToSelectAfterRemove(map, selected) ?? node.parentId
     store.remove(selected)
-    setSelectedId(node.parentId)
+    setSelectedId(next)
   }, [map, selected, store])
 
   const commitAndAddChild = useCallback(() => {
