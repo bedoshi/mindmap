@@ -47,6 +47,10 @@ beforeEach(() => {
     Element.prototype.releasePointerCapture = vi.fn()
     Element.prototype.hasPointerCapture = vi.fn(() => false)
   }
+  // jsdom には elementFromPoint が無い。ダブルクリックの判定などが呼ぶので、何も見つからない扱いにする
+  if (typeof document.elementFromPoint !== 'function') {
+    document.elementFromPoint = vi.fn(() => null)
+  }
   // jsdom の getContext は「未実装」のエラーをコンソールに出すため、静かに null を返すよう差し替える
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null)
 })

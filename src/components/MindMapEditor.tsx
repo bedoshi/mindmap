@@ -14,6 +14,7 @@ import { computeLayout } from '../model/layout'
 import {
   countSubtree,
   isDescendant,
+  moveRoot,
   newId,
   nodeToSelectAfterRemove,
   updateText,
@@ -47,6 +48,23 @@ interface EditState {
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; viewX: number; viewY: number }
   | { kind: 'node'; id: NodeId; startX: number; startY: number; moved: boolean }
+  | {
+      kind: 'root'
+      id: NodeId
+      startX: number
+      startY: number
+      /** ドラッグ開始時のルート中心座標 */
+      originX: number
+      originY: number
+      moved: boolean
+    }
+
+/** ルート（メイン・フローティング）を移動している間の仮の中心座標 */
+interface RootMoveVisual {
+  id: NodeId
+  x: number
+  y: number
+}
 
 interface NodeDragVisual {
   id: NodeId
@@ -79,13 +97,17 @@ export function MindMapEditor({ initialMap, library }: Props) {
     }
   }, [map, initialMap, reportChange])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const initialMapRef = useRef(initialMap)
   const dragRef = useRef<DragState | null>(null)
-  const lastTapRef = useRef<{ id: NodeId; time: number } | null>(null)
+  /** フローティングノード作成直後の mousedown でフォーカスが外れて入力欄が閉じないようにする */
+  const keepFocusRef = useRef(false)
+  const lastTapRef = useRef<{ id: NodeId | null; time: number; x: number; y: number } | null>(null)
 
   const [selectedId, setSelectedId] = useState<NodeId | null>(map.rootId)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [view, setView] = useState<View>({ x: 0, y: 0, zoom: 1 })
   const [nodeDrag, setNodeDrag] = useState<NodeDragVisual | null>(null)
+  const [rootMove, setRootMove] = useState<RootMoveVisual | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [mapListOpen, setMapListOpen] = useState(false)
 
@@ -96,16 +118,24 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const editing = edit !== null && map.nodes[edit.id] ? edit : null
 
   // 編集中は入力中のテキストでレイアウトを計算し、幅が追従するようにする
-  const layout = useMemo(
-    () => computeLayout(editing ? updateText(map, editing.id, editing.draft) : map),
-    [map, editing],
-  )
+  // ルートの移動中は仮の座標で計算し、ドロップ時に初めて履歴へ積む
+  const layout = useMemo(() => {
+    let displayMap = editing ? updateText(map, editing.id, editing.draft) : map
+    if (rootMove) displayMap = moveRoot(displayMap, rootMove.id, rootMove.x, rootMove.y)
+    return computeLayout(displayMap)
+  }, [map, editing, rootMove])
 
-  // 初期表示でルートを画面中央に置く
+  // 初期表示でメインのルートを画面中央に置く
   useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
-    setView({ x: el.clientWidth / 2, y: el.clientHeight / 2, zoom: 1 })
+    const first = initialMapRef.current
+    const root = first.nodes[first.rootId]
+    setView({
+      x: el.clientWidth / 2 - (root?.x ?? 0),
+      y: el.clientHeight / 2 - (root?.y ?? 0),
+      zoom: 1,
+    })
   }, [])
 
   const showMessage = useCallback((text: string) => {
@@ -129,11 +159,12 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const removeIfEmptyLeaf = useCallback(
     (id: NodeId): boolean => {
       const node = map.nodes[id]
-      if (!node || node.parentId === null || node.children.length > 0 || node.text !== '') {
+      if (!node || id === map.rootId || node.children.length > 0 || node.text !== '') {
         return false
       }
       store.remove(id)
-      setSelectedId((current) => (current === id ? node.parentId : current))
+      // フローティングノードを消した場合は親が無いので、メインのルートを選択する
+      setSelectedId((current) => (current === id ? (node.parentId ?? map.rootId) : current))
       return true
     },
     [map, store],
@@ -146,10 +177,12 @@ export function MindMapEditor({ initialMap, library }: Props) {
     const node = map.nodes[editing.id]
     if (!node) return
     if (text === '') {
-      if (node.parentId === null) return // ルートは空にしない
+      if (editing.id === map.rootId) return // メインのルートは空にしない
       if (node.children.length === 0) {
         store.remove(editing.id)
-        setSelectedId((current) => (current === editing.id ? node.parentId : current))
+        setSelectedId((current) =>
+          current === editing.id ? (node.parentId ?? map.rootId) : current,
+        )
         return
       }
     }
@@ -174,6 +207,17 @@ export function MindMapEditor({ initialMap, library }: Props) {
     [store],
   )
 
+  /** (x, y) を中心とするフローティングノードを作り、すぐ編集状態にする */
+  const addFloating = useCallback(
+    (x: number, y: number) => {
+      const id = newId()
+      store.addFloating(id, Math.round(x), Math.round(y))
+      setSelectedId(id)
+      setEdit({ id, draft: '', selectAll: false })
+    },
+    [store],
+  )
+
   const addSibling = useCallback(
     (nodeId: NodeId) => {
       const id = newId()
@@ -187,8 +231,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const removeSelected = useCallback(() => {
     if (selected === null) return
     const node = map.nodes[selected]
-    if (node.parentId === null) return
-    const next = nodeToSelectAfterRemove(map, selected) ?? node.parentId
+    if (selected === map.rootId) return
+    const next = nodeToSelectAfterRemove(map, selected) ?? node.parentId ?? map.rootId
     store.remove(selected)
     setSelectedId(next)
   }, [map, selected, store])
@@ -457,11 +501,41 @@ export function MindMapEditor({ initialMap, library }: Props) {
         startEdit(id)
         return
       }
-      lastTapRef.current = { id, time: now }
+      lastTapRef.current = { id, time: now, x: e.clientX, y: e.clientY }
       setSelectedId(id)
-      dragRef.current = { kind: 'node', id, startX: e.clientX, startY: e.clientY, moved: false }
+      const node = map.nodes[id]
+      dragRef.current =
+        node?.parentId === null
+          ? {
+              kind: 'root',
+              id,
+              startX: e.clientX,
+              startY: e.clientY,
+              originX: node.x ?? 0,
+              originY: node.y ?? 0,
+              moved: false,
+            }
+          : { kind: 'node', id, startX: e.clientX, startY: e.clientY, moved: false }
     } else {
-      lastTapRef.current = null
+      // 余白のダブルクリックで、その位置にフローティングノードを作る
+      const last = lastTapRef.current
+      const now = e.timeStamp
+      if (
+        last &&
+        last.id === null &&
+        now - last.time < DOUBLE_TAP_MS &&
+        Math.hypot(e.clientX - last.x, e.clientY - last.y) < DRAG_THRESHOLD * 2
+      ) {
+        lastTapRef.current = null
+        keepFocusRef.current = true
+        const rect = e.currentTarget.getBoundingClientRect()
+        addFloating(
+          (e.clientX - rect.left - view.x) / view.zoom,
+          (e.clientY - rect.top - view.y) / view.zoom,
+        )
+        return
+      }
+      lastTapRef.current = { id: null, time: now, x: e.clientX, y: e.clientY }
       setSelectedId(null)
       dragRef.current = {
         kind: 'pan',
@@ -485,7 +559,18 @@ export function MindMapEditor({ initialMap, library }: Props) {
       }))
       return
     }
-    if (map.nodes[drag.id]?.parentId === null) return // ルートは移動できない
+    if (drag.kind === 'root') {
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD) return
+        drag.moved = true
+      }
+      setRootMove({
+        id: drag.id,
+        x: drag.originX + (e.clientX - drag.startX) / view.zoom,
+        y: drag.originY + (e.clientY - drag.startY) / view.zoom,
+      })
+      return
+    }
     if (!drag.moved) {
       if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD) return
       drag.moved = true
@@ -520,7 +605,15 @@ export function MindMapEditor({ initialMap, library }: Props) {
     if (id && editing?.id !== id) startEdit(id)
   }
 
+  /** pointerdown の直後に来る mousedown の既定動作（フォーカス移動）を、作成直後の 1 回だけ止める */
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (!keepFocusRef.current) return
+    keepFocusRef.current = false
+    e.preventDefault()
+  }
+
   const handlePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    keepFocusRef.current = false
     const drag = dragRef.current
     dragRef.current = null
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -529,7 +622,11 @@ export function MindMapEditor({ initialMap, library }: Props) {
     if (drag?.kind === 'node' && drag.moved && nodeDrag?.targetId) {
       store.move(drag.id, nodeDrag.targetId)
     }
+    if (drag?.kind === 'root' && drag.moved && rootMove) {
+      store.moveRoot(drag.id, Math.round(rootMove.x), Math.round(rootMove.y))
+    }
     setNodeDrag(null)
+    setRootMove(null)
   }
 
   // ---- 描画 ----
@@ -541,7 +638,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
     <div className="editor">
       <Toolbar
         hasSelection={selected !== null}
-        canDelete={selectedNode !== null && selectedNode.parentId !== null}
+        canDelete={selectedNode !== null && selected !== map.rootId}
         canUndo={store.canUndo}
         canRedo={store.canRedo}
         zoom={view.zoom}
@@ -584,7 +681,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
       />
       <div
         ref={containerRef}
-        className={nodeDrag ? 'canvas dragging-node' : 'canvas'}
+        className={nodeDrag || rootMove ? 'canvas dragging-node' : 'canvas'}
+        onMouseDown={handleMouseDown}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -638,7 +736,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
       </div>
       <div className="help">
         Tab: 子を追加 / Enter: 兄弟を追加 / Delete: 削除 / F2・ダブルクリック: 編集 / 矢印キー: 移動 /
-        ドラッグ: 付け替え / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存
+        ドラッグ: 付け替え・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存
       </div>
       {(message ?? errorMessage) && <div className="message">{message ?? errorMessage}</div>}
     </div>

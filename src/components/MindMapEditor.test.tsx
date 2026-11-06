@@ -28,8 +28,8 @@ function createLibrary(map: MindMap, overrides: Partial<MapLibrary> = {}): MapLi
 
 function renderEditor(map: MindMap = createMindMap('中心')) {
   const library = createLibrary(map)
-  render(<MindMapEditor initialMap={map} library={library} />)
-  return { library }
+  const { container } = render(<MindMapEditor initialMap={map} library={library} />)
+  return { library, container }
 }
 
 describe('MindMapEditor', () => {
@@ -140,5 +140,50 @@ describe('MindMapEditor', () => {
     await user.click(undoButton)
 
     expect(screen.queryByText('一時的')).not.toBeInTheDocument()
+  })
+
+  it('余白をダブルクリックするとフローティングノードが作られ、すぐ入力できる', async () => {
+    const user = userEvent.setup()
+    const { library, container } = renderEditor()
+
+    await user.dblClick(container.querySelector('.canvas')!)
+    await user.type(screen.getByRole('textbox'), '浮遊{Enter}')
+
+    expect(screen.getByText('浮遊')).toBeInTheDocument()
+    const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+    expect(reported?.floatingRootIds).toHaveLength(1)
+    const floating = reported!.nodes[reported!.floatingRootIds[0]]
+    expect(floating).toMatchObject({ text: '浮遊', parentId: null })
+    expect(typeof floating.x).toBe('number')
+    expect(typeof floating.y).toBe('number')
+  })
+
+  it('1 回のクリックではフローティングノードは作られず、作った直後に空のまま Esc すると取り消される', async () => {
+    const user = userEvent.setup()
+    const { library, container } = renderEditor()
+    const canvas = container.querySelector('.canvas')!
+
+    await user.click(canvas)
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+
+    await user.dblClick(canvas)
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+    expect(reported?.floatingRootIds ?? []).toHaveLength(0)
+  })
+
+  it('フローティングノードは削除でき、メインのルートは削除できない', async () => {
+    const user = userEvent.setup()
+    const { library, container } = renderEditor()
+    await user.dblClick(container.querySelector('.canvas')!)
+    await user.type(screen.getByRole('textbox'), '浮遊{Enter}')
+
+    await user.click(screen.getByRole('button', { name: '削除' }))
+
+    expect(screen.queryByText('浮遊')).not.toBeInTheDocument()
+    expect(vi.mocked(library.reportChange).mock.lastCall?.[0].floatingRootIds).toEqual([])
+    expect(screen.getByRole('button', { name: '削除' })).toBeDisabled()
   })
 })

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { addChild, createMindMap, toggleCollapse } from '../model/mindmap'
+import {
+  addChild,
+  addFloatingRoot,
+  createMindMap,
+  moveRoot,
+  toggleCollapse,
+} from '../model/mindmap'
 import { mindMapToXml, titleOf, xmlToMindMap } from './xml'
 
 function buildMap() {
@@ -21,10 +27,38 @@ describe('mindMapToXml', () => {
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<mindmap version="1">')).toBe(
       true,
     )
-    expect(xml).toContain(`<node id="${rootId}" text="中心">`)
-    expect(xml).toContain('<node id="a" text="右の子" side="right" collapsed="true">')
+    expect(xml).toContain(`<node id="${rootId}" text="中心" x="0" y="0">`)
+    expect(xml).toMatch(
+      /<node id="a" text="右の子" x="[\d.]+" y="[\d.-]+" side="right" collapsed="true">/,
+    )
+    expect(xml).toMatch(/<node id="b" text="左の子" x="-[\d.]+" y="[\d.-]+" side="left"\/>/)
+    // 折りたたみで非表示の孫には座標が付かない
     expect(xml).toContain('<node id="a1" text="孫"/>')
-    expect(xml).toContain('<node id="b" text="左の子" side="left"/>')
+  })
+
+  it('全ノードの中心座標を書き出し、右側の子は親より右、左側の子は親より左になる', () => {
+    let map = createMindMap('中心')
+    map = addChild(map, map.rootId, 'a', '右')
+    map = addChild(map, map.rootId, 'b', '左')
+
+    const xml = mindMapToXml(map)
+
+    const x = (id: string) =>
+      Number(xml.match(new RegExp(String.raw`id="${id}"[^>]* x="([\d.-]+)"`))![1])
+    expect(x('a')).toBeGreaterThan(x(map.rootId))
+    expect(x('b')).toBeLessThan(x(map.rootId))
+  })
+
+  it('フローティングノードを mindmap 直下に、座標付きで出力する', () => {
+    let map = createMindMap('中心')
+    map = addFloatingRoot(map, 'f', 300, -120, '浮遊')
+    map = addChild(map, 'f', 'f1', '浮遊の子')
+
+    const xml = mindMapToXml(map)
+
+    expect(xml).toContain('  <node id="f" text="浮遊" x="300" y="-120">')
+    expect(xml).toContain('    <node id="f1" text="浮遊の子"')
+    expect(xml.indexOf(`id="${map.rootId}"`)).toBeLessThan(xml.indexOf('id="f"'))
   })
 
   it('属性に使えない文字をエスケープする', () => {
@@ -43,6 +77,34 @@ describe('xmlToMindMap', () => {
     const restored = xmlToMindMap(mindMapToXml(map))
 
     expect(restored).toEqual(map)
+  })
+
+  it('フローティングノードとその子孫・ルートの座標を元に戻す', () => {
+    let map = createMindMap('中心')
+    map = moveRoot(map, map.rootId, 40, -25)
+    map = addFloatingRoot(map, 'f', 300, -120, '浮遊')
+    map = addChild(map, 'f', 'f1', '浮遊の子')
+    map = addFloatingRoot(map, 'g', -80, 200, '別の浮遊')
+
+    const restored = xmlToMindMap(mindMapToXml(map))
+
+    expect(restored).toEqual(map)
+    expect(restored.floatingRootIds).toEqual(['f', 'g'])
+  })
+
+  it('ルート以外のノードの x / y は読み込まない', () => {
+    const xml = `<mindmap version="1">
+      <node id="r" text="root" x="abc" y="5">
+        <node id="c" text="child" x="999" y="999"/>
+      </node>
+    </mindmap>`
+
+    const map = xmlToMindMap(xml)
+
+    expect(map.nodes.r.x).toBeUndefined()
+    expect(map.nodes.r.y).toBe(5)
+    expect(map.nodes.c.x).toBeUndefined()
+    expect(map.floatingRootIds).toEqual([])
   })
 
   it('エスケープされたテキストを元に戻す', () => {

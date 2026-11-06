@@ -58,8 +58,10 @@ src/
 
 ## データモデル（`src/model/types.ts`）
 
-- `MindMap = { rootId, nodes: Record<NodeId, MindMapNode> }` のフラットな構造。親子関係は各ノードの `parentId` と `children`（表示順）で双方向に持つ。
-- `MindMapNode.side`（`left` | `right`）はルート直下のノードにのみ付与し、ルートのどちら側に出すかを表す。それ以外のノードは親と同じ側に配置されるため持たない。
+- `MindMap = { rootId, floatingRootIds, nodes: Record<NodeId, MindMapNode> }` のフラットな構造。親子関係は各ノードの `parentId` と `children`（表示順）で双方向に持つ。
+- ツリーの根は `parentId === null` のノードで、`rootId`（メインのルート）と `floatingRootIds`（フローティングノード、作成順）の 2 種類。`allRootIds(map)` で両方をまとめて取れる。メインのルートだけが削除不可で、マップのタイトルになる。
+- `MindMapNode.x / y` は根のノードにのみ意味を持つ中心のマップ座標（省略時 0）。子孫の位置は自動レイアウトの結果で、データには持たない。
+- `MindMapNode.side`（`left` | `right`）は根（メイン・フローティング）の直下のノードにのみ付与し、ルートのどちら側に出すかを表す。それ以外のノードは親と同じ側に配置されるため持たない。
 - ノードID・マップIDは `crypto.randomUUID()` で生成する。
 
 ## 状態管理
@@ -83,6 +85,7 @@ src/
 
 - `MapStorage` インターフェース（`list / load / save / remove / describeLocation`）で保存先を抽象化し、`createStorage()` が `window.mindmapApi` の有無で実装を選ぶ。
 - **XML が正規の保存形式**。Web 版（localStorage）でも値には XML 文字列を入れ、一覧表示用にタイトルと更新日時を JSON で添えている。書き出し/読み込みのファイルも同じ XML。
+- XML では `mindmap` 直下の最初の `node` がメインのルート、2 つ目以降がフローティングノード。シリアライズ時に `computeLayout` を呼び、表示されている全ノードの中心座標を `x / y` として書き出す（根以外は参考情報で、読み込み時は根の `x / y` だけを使う）。0 は省略時と同じなので読み込み時は持たない。
 - XML のシリアライズは `xml.ts` で自前の文字列組み立て（インデント付き）、パースはブラウザ標準の `DOMParser`。どちらもレンダラー側で行い、Electron のメインプロセスはファイルの読み書きだけを担当する（Node には DOMParser が無いため）。
 - Electron 版の一覧取得は、ファイル一覧を取ったあと各ファイルを読み込んでタイトルを取り出す。マップ数が多くなって遅くなる場合は、メタ情報の別ファイル化を検討する。
 
@@ -100,8 +103,8 @@ src/
 
 ## レイアウト（`src/model/layout.ts`）
 
-- 毎レンダリングで `computeLayout(map)` を `useMemo` で計算する純粋関数。ルートを原点 (0,0) に置き、各部分木の高さを先に集計してから再帰的に座標を決める。
-- ルート直下は `side` で左右に分け、それぞれ縦に積む。ルートに子を追加するときの側は `mindmap.ts` の `pickSide` が部分木のノード数の少ない側を選ぶ。
+- 毎レンダリングで `computeLayout(map)` を `useMemo` で計算する純粋関数。各部分木の高さを先に集計してから再帰的に座標を決める。根（メイン・フローティング）ごとに、根の `x / y`（省略時 (0,0)）を中心に置いて配置し、`nodes` / `edges` / `bounds` は全ツリーをまとめて返す。
+- 根の直下は `side` で左右に分け、それぞれ縦に積む。根に子を追加するときの側は `mindmap.ts` の `pickSide(map, rootId)` が部分木のノード数の少ない側を選ぶ。
 - ノード幅は Canvas の `measureText` でテキスト幅を測って決める。フォント指定（`NODE_FONT` / `ROOT_FONT`）を `NodeView` の inline style にも適用して、計測と描画のフォントを一致させている。CSS 側で padding や border を変えるときは `layout.ts` の定数と整合させること（枠線ありのノードは padding を枠線分だけ減らしている）。
 - 接続線は 3 次ベジェ曲線の SVG パス文字列として返す。枝の色は `BRANCH_COLORS` をルート直下ノードの順序で割り当てる。
 - 編集中はドラフトテキストでレイアウトを計算し、入力に合わせてノード幅が追従するようにしている。
@@ -109,7 +112,9 @@ src/
 ## 描画と操作（`src/components/MindMapEditor.tsx`）
 
 - キャンバスは `overflow: hidden` の `.canvas` の中に、`transform: translate(...) scale(...)` を当てた `.viewport` を置き、その中に接続線用の SVG（`overflow: visible`）と絶対配置したノード（HTML）を並べる構成。SVG と HTML を同じ transform 配下に置くことでパン/ズームを 1 箇所で扱う。
-- ポインタ操作は `.canvas` の Pointer Events でまとめて処理する（背景ドラッグ＝パン、ノードドラッグ＝付け替え）。`setPointerCapture` を使うため `dblclick` がノード要素に届かないことがあり、ダブルクリックは pointerdown の間隔で自前判定している（`dblclick` もフォールバックで処理）。
+- ポインタ操作は `.canvas` の Pointer Events でまとめて処理する（背景ドラッグ＝パン、ノードドラッグ＝付け替え、根のドラッグ＝座標移動）。
+- 根のドラッグ中は `rootMove`（仮の座標）をローカル state に持ち、`moveRoot` した MindMap でレイアウトを計算して表示する。履歴に積むのはドロップ時の 1 回だけ（座標は整数に丸める）。
+- 余白のダブルクリックも自前判定（pointerdown の間隔と位置）で、フローティングノードを作って編集状態にする。作成直後の mousedown の既定動作（フォーカス移動）を `keepFocusRef` で 1 回止めないと、入力欄が即座に blur されて空のまま消えてしまう。`setPointerCapture` を使うため `dblclick` がノード要素に届かないことがあり、ダブルクリックは pointerdown の間隔で自前判定している（`dblclick` もフォールバックで処理）。
 - ドロップ先の判定は `document.elementFromPoint` で `[data-node-id]` を探す。ゴースト要素は `pointer-events: none`。
 - ホイールイベントは `preventDefault` が必要なため React の `onWheel` ではなく `addEventListener('wheel', ..., { passive: false })` で登録している。
 - キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。
@@ -121,6 +126,7 @@ src/
 - 共通準備は `src/test/setup.ts`。次の補完をしている。
   - Node 22 以降のグローバル `localStorage`（`--localstorage-file` 無しでは使えない）をメモリ上の Storage に差し替える。
   - jsdom に無い Pointer Capture（`setPointerCapture` など）をモックにする。`MindMapEditor` のポインタ処理がこれを呼ぶため。
+  - `document.elementFromPoint` を null を返すモックにする（ダブルクリックの判定が呼ぶため）。
   - `HTMLCanvasElement.prototype.getContext` を null を返すモックにする。`layout.ts` のテキスト幅計測はフォールバック（文字数 × 固定幅）になる。
   - 各テスト後に `cleanup()` と `localStorage.clear()` を行う。
 - `electron/` のテストは Node 環境で動かす（ファイル先頭の `// @vitest-environment node`）。setup ファイルは `document` の有無で DOM 向けの処理をスキップする。

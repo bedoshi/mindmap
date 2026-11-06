@@ -16,6 +16,7 @@ export function createMindMap(rootText = '中心トピック'): MindMap {
   const rootId = newId()
   return {
     rootId,
+    floatingRootIds: [],
     nodes: {
       [rootId]: { id: rootId, text: rootText, parentId: null, children: [], collapsed: false },
     },
@@ -61,9 +62,14 @@ export function countSubtree(map: MindMap, id: NodeId): number {
   return collectSubtree(map, id).length
 }
 
-/** ルート直下にノードを追加するとき、左右のバランスが取れる側を選ぶ */
-function pickSide(map: MindMap): Side {
-  const root = map.nodes[map.rootId]
+/** メインのルートとフローティングノードをあわせた、すべてのツリーの根（メインが先頭） */
+export function allRootIds(map: MindMap): NodeId[] {
+  return [map.rootId, ...map.floatingRootIds]
+}
+
+/** ルート（メイン・フローティング）直下にノードを追加するとき、左右のバランスが取れる側を選ぶ */
+function pickSide(map: MindMap, rootId: NodeId): Side {
+  const root = map.nodes[rootId]
   let right = 0
   let left = 0
   for (const childId of root.children) {
@@ -87,7 +93,7 @@ function withSide(node: MindMapNode, side: Side | undefined): MindMapNode {
 export function addChild(map: MindMap, parentId: NodeId, id: NodeId, text = ''): MindMap {
   const parent = map.nodes[parentId]
   if (!parent || map.nodes[id]) return map
-  const side = parentId === map.rootId ? pickSide(map) : undefined
+  const side = parent.parentId === null ? pickSide(map, parentId) : undefined
   const node = withSide({ id, text, parentId, children: [], collapsed: false }, side)
   return {
     ...map,
@@ -121,12 +127,37 @@ export function updateText(map: MindMap, id: NodeId, text: string): MindMap {
   return { ...map, nodes: { ...map.nodes, [id]: { ...node, text } } }
 }
 
-/** id とその子孫を削除する。ルートは削除できない */
+/**
+ * フローティングノードを (x, y) を中心とする位置に追加する。
+ * 同じ id のノードが既にある場合は何もしない
+ */
+export function addFloatingRoot(map: MindMap, id: NodeId, x: number, y: number, text = ''): MindMap {
+  if (map.nodes[id]) return map
+  const node: MindMapNode = { id, text, parentId: null, children: [], collapsed: false, x, y }
+  return {
+    ...map,
+    floatingRootIds: [...map.floatingRootIds, id],
+    nodes: { ...map.nodes, [id]: node },
+  }
+}
+
+/** ルート（メイン・フローティング）の中心座標を変更する。ルート以外や位置が同じ場合は何もしない */
+export function moveRoot(map: MindMap, id: NodeId, x: number, y: number): MindMap {
+  const node = map.nodes[id]
+  if (!node || node.parentId !== null) return map
+  if ((node.x ?? 0) === x && (node.y ?? 0) === y) return map
+  return { ...map, nodes: { ...map.nodes, [id]: { ...node, x, y } } }
+}
+
+/** id とその子孫を削除する。メインのルートは削除できない（フローティングノードは削除できる） */
 export function removeNode(map: MindMap, id: NodeId): MindMap {
   const node = map.nodes[id]
-  if (!node || node.parentId === null) return map
+  if (!node || id === map.rootId) return map
   const nodes = { ...map.nodes }
   for (const subId of collectSubtree(map, id)) delete nodes[subId]
+  if (node.parentId === null) {
+    return { ...map, floatingRootIds: map.floatingRootIds.filter((f) => f !== id), nodes }
+  }
   const parent = map.nodes[node.parentId]
   nodes[parent.id] = { ...parent, children: parent.children.filter((c) => c !== id) }
   return { ...map, nodes }
@@ -170,7 +201,7 @@ export function moveNode(map: MindMap, id: NodeId, newParentId: NodeId, index?: 
   children.splice(insertAt, 0, id)
   nodes[newParentId] = { ...target, children, collapsed: false }
 
-  const side = newParentId === map.rootId ? pickSide({ ...map, nodes }) : undefined
+  const side = newParent.parentId === null ? pickSide({ ...map, nodes }, newParentId) : undefined
   nodes[id] = withSide({ ...node, parentId: newParentId }, side)
   return { ...map, nodes }
 }

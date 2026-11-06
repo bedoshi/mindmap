@@ -51,4 +51,20 @@ describe('useMindMap', () => {
     expect(result.current.canUndo).toBe(false)
     expect(result.current.map).toBe(initial)
   })
+
+  it('フローティングノードの追加とルートの移動が履歴に積まれ、Undo で戻せる', () => {
+    const initial = createMindMap('root')
+    const { result } = renderHook(() => useMindMap(initial))
+
+    act(() => result.current.addFloating('f', 10, 20, '浮遊'))
+    act(() => result.current.moveRoot('f', 30, 40))
+
+    expect(result.current.map.nodes['f']).toMatchObject({ x: 30, y: 40 })
+
+    act(() => result.current.undo())
+    expect(result.current.map.nodes['f']).toMatchObject({ x: 10, y: 20 })
+
+    act(() => result.current.undo())
+    expect(result.current.map).toBe(initial)
+  })
 })

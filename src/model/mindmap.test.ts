@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   addChild,
+  addFloatingRoot,
+  allRootIds,
   addSibling,
   collectSubtree,
   countSubtree,
   createMindMap,
   isDescendant,
   moveNode,
+  moveRoot,
   nodeToSelectAfterRemove,
   removeNode,
   toggleCollapse,
@@ -263,5 +266,73 @@ describe('isDescendant / collectSubtree / countSubtree', () => {
 
     expect(collectSubtree(map, 'a')).toEqual(['a', 'a1', 'a2'])
     expect(countSubtree(map, 'a')).toBe(3)
+  })
+})
+
+describe('フローティングノード', () => {
+  it('addFloatingRoot は指定した中心座標で、親を持たない別のツリーの根を追加する', () => {
+    const { map, rootId } = buildMap()
+
+    const next = addFloatingRoot(map, 'f', 120, -40, '浮遊')
+
+    expect(next.nodes['f']).toMatchObject({ text: '浮遊', parentId: null, x: 120, y: -40 })
+    expect(next.floatingRootIds).toEqual(['f'])
+    expect(next.rootId).toBe(rootId)
+    expect(allRootIds(next)).toEqual([rootId, 'f'])
+  })
+
+  it('同じ id が既にあれば何もしない', () => {
+    const { map } = buildMap()
+
+    expect(addFloatingRoot(map, 'a', 0, 0)).toBe(map)
+  })
+
+  it('フローティングノードの直下に追加した子には左右の side が付き、左右のバランスが取られる', () => {
+    let map = addFloatingRoot(buildMap().map, 'f', 0, 0, '浮遊')
+
+    map = addChild(map, 'f', 'f1')
+    map = addChild(map, 'f', 'f2')
+    map = addChild(map, 'f1', 'f11')
+
+    expect(map.nodes['f1'].side).toBe('right')
+    expect(map.nodes['f2'].side).toBe('left')
+    expect(map.nodes['f11'].side).toBeUndefined()
+  })
+
+  it('moveRoot はルートの座標だけを変え、同じ位置・ルート以外では同じ参照を返す', () => {
+    const { map, rootId } = buildMap()
+    const withFloating = addFloatingRoot(map, 'f', 10, 20)
+
+    const moved = moveRoot(withFloating, 'f', 50, 60)
+    const mainMoved = moveRoot(withFloating, rootId, 5, 6)
+
+    expect(moved.nodes['f']).toMatchObject({ x: 50, y: 60 })
+    expect(mainMoved.nodes[rootId]).toMatchObject({ x: 5, y: 6 })
+    expect(moveRoot(withFloating, 'f', 10, 20)).toBe(withFloating)
+    expect(moveRoot(withFloating, rootId, 0, 0)).toBe(withFloating)
+    expect(moveRoot(withFloating, 'a', 1, 1)).toBe(withFloating)
+  })
+
+  it('removeNode はフローティングノードを子孫ごと削除できるが、メインのルートは削除できない', () => {
+    let map = addFloatingRoot(buildMap().map, 'f', 0, 0, '浮遊')
+    map = addChild(map, 'f', 'f1')
+
+    const next = removeNode(map, 'f')
+
+    expect(next.nodes).not.toHaveProperty('f')
+    expect(next.nodes).not.toHaveProperty('f1')
+    expect(next.floatingRootIds).toEqual([])
+    expect(removeNode(map, map.rootId)).toBe(map)
+  })
+
+  it('別のツリーのノードへ付け替えられる', () => {
+    let map = addFloatingRoot(buildMap().map, 'f', 0, 0, '浮遊')
+
+    map = moveNode(map, 'a1', 'f')
+
+    expect(map.nodes['a1'].parentId).toBe('f')
+    expect(map.nodes['a1'].side).toBeDefined()
+    expect(map.nodes['f'].children).toEqual(['a1'])
+    expect(map.nodes['a'].children).toEqual(['a2'])
   })
 })

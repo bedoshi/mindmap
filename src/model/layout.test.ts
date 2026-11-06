@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BRANCH_COLORS, computeLayout, measureNode, ROOT_COLOR } from './layout'
-import { addChild, createMindMap, toggleCollapse } from './mindmap'
+import { addChild, addFloatingRoot, createMindMap, moveRoot, toggleCollapse } from './mindmap'
 
 /**
  * ルート直下に a（右）と b（左）、a の下に a1, a2 を持つマップ。
@@ -113,5 +113,46 @@ describe('computeLayout', () => {
       expect(node.x + node.width).toBeLessThanOrEqual(bounds.maxX)
       expect(node.y + node.height).toBeLessThanOrEqual(bounds.maxY)
     }
+  })
+})
+
+describe('computeLayout（フローティングノード・ルートの移動）', () => {
+  it('ルートの座標を中心として、子孫ごと平行移動する', () => {
+    const { map, rootId } = buildMap()
+    const base = computeLayout(map)
+
+    const moved = computeLayout(moveRoot(map, rootId, 200, -100))
+
+    for (const id of Object.keys(base.nodes)) {
+      expect(moved.nodes[id].x).toBeCloseTo(base.nodes[id].x + 200)
+      expect(moved.nodes[id].y).toBeCloseTo(base.nodes[id].y - 100)
+    }
+  })
+
+  it('フローティングノードを指定した中心座標に、独立したツリーとして配置する', () => {
+    let { map } = buildMap()
+    map = addFloatingRoot(map, 'f', 500, 300, '浮遊')
+    map = addChild(map, 'f', 'f1', '浮遊の子')
+
+    const layout = computeLayout(map)
+
+    const f = layout.nodes['f']
+    expect(f.x + f.width / 2).toBeCloseTo(500)
+    expect(f.y + f.height / 2).toBeCloseTo(300)
+    expect(f).toMatchObject({ side: 'center', depth: 0, color: ROOT_COLOR })
+    expect(layout.nodes['f1'].depth).toBe(1)
+    expect(layout.nodes['f1'].x).toBeGreaterThan(f.x + f.width)
+    expect(layout.edges.map((e) => e.id)).toContain('f->f1')
+    // メインのツリーの配置は変わらない
+    expect(layout.nodes['a']).toEqual(computeLayout(buildMap().map).nodes['a'])
+  })
+
+  it('bounds は全ツリーを含む', () => {
+    const { map } = buildMap()
+
+    const layout = computeLayout(addFloatingRoot(map, 'f', 1000, 800, '浮遊'))
+
+    expect(layout.bounds.maxX).toBeGreaterThan(1000)
+    expect(layout.bounds.maxY).toBeGreaterThan(800)
   })
 })

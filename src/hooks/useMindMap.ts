@@ -1,8 +1,10 @@
 import { useCallback, useReducer } from 'react'
 import {
   addChild,
+  addFloatingRoot,
   addSibling,
   moveNode,
+  moveRoot,
   removeNode,
   toggleCollapse,
   updateText,
@@ -25,10 +27,12 @@ interface HistoryState {
 type EditAction =
   | { type: 'addChild'; parentId: NodeId; id: NodeId; text?: string }
   | { type: 'addSibling'; nodeId: NodeId; id: NodeId; text?: string }
+  | { type: 'addFloating'; id: NodeId; x: number; y: number; text?: string }
   | { type: 'updateText'; id: NodeId; text: string }
   | { type: 'remove'; id: NodeId }
   | { type: 'toggleCollapse'; id: NodeId }
   | { type: 'move'; id: NodeId; parentId: NodeId; index?: number }
+  | { type: 'moveRoot'; id: NodeId; x: number; y: number }
 
 type Action = EditAction | { type: 'undo' } | { type: 'redo' }
 
@@ -38,6 +42,8 @@ function applyEdit(map: MindMap, action: EditAction): MindMap {
       return addChild(map, action.parentId, action.id, action.text)
     case 'addSibling':
       return addSibling(map, action.nodeId, action.id, action.text)
+    case 'addFloating':
+      return addFloatingRoot(map, action.id, action.x, action.y, action.text)
     case 'updateText':
       return updateText(map, action.id, action.text)
     case 'remove':
@@ -46,6 +52,8 @@ function applyEdit(map: MindMap, action: EditAction): MindMap {
       return toggleCollapse(map, action.id)
     case 'move':
       return moveNode(map, action.id, action.parentId, action.index)
+    case 'moveRoot':
+      return moveRoot(map, action.id, action.x, action.y)
   }
 }
 
@@ -94,6 +102,11 @@ export function useMindMap(initialMap: MindMap) {
       dispatch({ type: 'addSibling', nodeId, id, text }),
     [],
   )
+  const addFloating = useCallback(
+    (id: NodeId, x: number, y: number, text?: string) =>
+      dispatch({ type: 'addFloating', id, x, y, text }),
+    [],
+  )
   const setText = useCallback(
     (id: NodeId, text: string) => dispatch({ type: 'updateText', id, text }),
     [],
@@ -105,6 +118,10 @@ export function useMindMap(initialMap: MindMap) {
       dispatch({ type: 'move', id, parentId, index }),
     [],
   )
+  const moveRootTo = useCallback(
+    (id: NodeId, x: number, y: number) => dispatch({ type: 'moveRoot', id, x, y }),
+    [],
+  )
   const undo = useCallback(() => dispatch({ type: 'undo' }), [])
   const redo = useCallback(() => dispatch({ type: 'redo' }), [])
 
@@ -114,10 +131,12 @@ export function useMindMap(initialMap: MindMap) {
     canRedo: state.future.length > 0,
     addChild: addChildNode,
     addSibling: addSiblingNode,
+    addFloating,
     setText,
     remove,
     toggleCollapse: toggle,
     move,
+    moveRoot: moveRootTo,
     undo,
     redo,
   }

@@ -1,10 +1,11 @@
-import { visibleChildren } from './mindmap'
+import { allRootIds, visibleChildren } from './mindmap'
 import type { MindMap, NodeId, Side } from './types'
 
 /**
  * マインドマップの自動レイアウト。
- * ルートを原点 (0,0) に置き、ルート直下のノードを左右に振り分け、
- * 各部分木を縦に積み上げて配置する（MindMeister 風のバランスレイアウト）。
+ * 各ツリー（メインのルートとフローティングノード）ごとに、ルートを中心に置き、
+ * ルート直下のノードを左右に振り分け、各部分木を縦に積み上げて配置する（MindMeister 風のバランスレイアウト）。
+ * ルートの中心位置は `MindMapNode.x / y`（省略時は原点 (0,0)）で、ルート以外のノードは手動配置しない。
  */
 
 export const NODE_FONT =
@@ -123,21 +124,10 @@ export function computeLayout(map: MindMap): Layout {
     subtreeHeights[id] = Math.max(size.height, total)
     return subtreeHeights[id]
   }
-  prepare(map.rootId, true)
+  const rootIds = allRootIds(map).filter((id) => map.nodes[id])
+  for (const rootId of rootIds) prepare(rootId, true)
 
   const nodes: Record<NodeId, NodeLayout> = {}
-  const rootSize = sizes[map.rootId]
-  nodes[map.rootId] = {
-    id: map.rootId,
-    x: -rootSize.width / 2,
-    y: -rootSize.height / 2,
-    width: rootSize.width,
-    height: rootSize.height,
-    side: 'center',
-    color: ROOT_COLOR,
-    depth: 0,
-    font: rootSize.font,
-  }
 
   const stackHeight = (ids: NodeId[]): number =>
     ids.reduce((sum, id, i) => sum + subtreeHeights[id] + (i > 0 ? V_GAP : 0), 0)
@@ -176,18 +166,37 @@ export function computeLayout(map: MindMap): Layout {
     }
   }
 
-  const rootChildren = visibleChildren(map, map.rootId)
-  const groups: Record<Side, NodeId[]> = { right: [], left: [] }
-  for (const childId of rootChildren) groups[map.nodes[childId].side ?? 'right'].push(childId)
+  for (const rootId of rootIds) {
+    const root = map.nodes[rootId]
+    const rootSize = sizes[rootId]
+    const centerX = root.x ?? 0
+    const centerY = root.y ?? 0
+    nodes[rootId] = {
+      id: rootId,
+      x: centerX - rootSize.width / 2,
+      y: centerY - rootSize.height / 2,
+      width: rootSize.width,
+      height: rootSize.height,
+      side: 'center',
+      color: ROOT_COLOR,
+      depth: 0,
+      font: rootSize.font,
+    }
 
-  for (const side of ['right', 'left'] as const) {
-    const ids = groups[side]
-    let y = -stackHeight(ids) / 2
-    const innerX = side === 'right' ? rootSize.width / 2 + H_GAP : -rootSize.width / 2 - H_GAP
-    for (const childId of ids) {
-      const color = BRANCH_COLORS[rootChildren.indexOf(childId) % BRANCH_COLORS.length]
-      place(childId, side, innerX, y + subtreeHeights[childId] / 2, color, 1)
-      y += subtreeHeights[childId] + V_GAP
+    const rootChildren = visibleChildren(map, rootId)
+    const groups: Record<Side, NodeId[]> = { right: [], left: [] }
+    for (const childId of rootChildren) groups[map.nodes[childId].side ?? 'right'].push(childId)
+
+    for (const side of ['right', 'left'] as const) {
+      const ids = groups[side]
+      let y = centerY - stackHeight(ids) / 2
+      const innerX =
+        side === 'right' ? centerX + rootSize.width / 2 + H_GAP : centerX - rootSize.width / 2 - H_GAP
+      for (const childId of ids) {
+        const color = BRANCH_COLORS[rootChildren.indexOf(childId) % BRANCH_COLORS.length]
+        place(childId, side, innerX, y + subtreeHeights[childId] / 2, color, 1)
+        y += subtreeHeights[childId] + V_GAP
+      }
     }
   }
 
