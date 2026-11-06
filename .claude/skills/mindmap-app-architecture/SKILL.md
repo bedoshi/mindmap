@@ -9,7 +9,7 @@ description: このリポジトリ（マインドマップ Web アプリ / Elect
 - 同じ `index.html` / `src/` を **Web 版**（`vite.config.ts`）と **Electron 版**（`electron.vite.config.ts`）の両方で使う。Electron 固有のコードは `electron/` に置き、レンダラー側は `window.mindmapApi` の有無で保存先を切り替えるだけにしている。
 - Lintは ESLint ではなく **oxlint** を使用（`.oxlintrc.json` で設定）。ESLint系のプラグインは使えないため、lintルールを追加する場合はoxlintの設定方法に従うこと。
 - TypeScript設定は `tsconfig.json` から `tsconfig.app.json`（レンダラー / アプリコード用）、`tsconfig.node.json`（Vite 設定など node 側コード用）、`tsconfig.electron.json`（`electron/` 用。Node 型のみで DOM 型なし）を参照する分割構成。`tsc -b` で 3 つまとめて検査する。
-- 実行時の依存パッケージは React のみ。Electron 関連（`electron` / `electron-vite` / `electron-builder`）とテスト関連（`vitest` / `jsdom` / `@testing-library/*`）は devDependencies。状態管理ライブラリや描画ライブラリは使っていない。
+- 実行時の依存パッケージは React と `electron-updater`（Electron のメインプロセスのみ）。Electron 関連（`electron` / `electron-vite` / `electron-builder`）とテスト関連（`vitest` / `jsdom` / `@testing-library/*`）は devDependencies。状態管理ライブラリや描画ライブラリは使っていない。
 - 単体テストは **Vitest**（`vitest.config.ts`）。テストファイルは対象と同じディレクトリに `対象名.test.ts(x)` で置く（詳細は「テスト」の節）。
 
 ## ディレクトリ構成
@@ -25,6 +25,7 @@ electron/
   preload.ts               contextBridge で window.mindmapApi を公開
   mapFiles.ts              保存ディレクトリの解決と maps/<id>.xml の読み書き（IPC ハンドラ本体）
   mapFiles.test.ts         ↑のテスト（Node 環境）
+  updater.ts               自動アップデート（electron-updater。パッケージ化された起動時だけ有効）
   menu.ts                  アプリケーションメニュー（ズーム系ショートカットを除いた最小構成）
 src/
   test/
@@ -98,6 +99,7 @@ src/
   - macOS: `~/Library/Application Support/mindmap`
   - Linux: `$XDG_DATA_HOME/mindmap`（未設定なら `~/.local/share/mindmap`）
 - マップファイルは `<データディレクトリ>/maps/<id>.xml`。ID は `[A-Za-z0-9_-]+` に限定してパストラバーサルを防ぎ、書き込みは一時ファイルに書いてから `rename` で置き換える。
+- 自動アップデートは `electron/updater.ts` の `checkForUpdates()` を `main.ts` の起動時に呼ぶ。`app.isPackaged` が false のとき（開発・preview）は何もしない。`electron-updater` は CommonJS なので、ESM のメインプロセスからは default import 経由で `autoUpdater` を取り出している。更新元は `electron-builder.yml` の `publish`（GitHub の `bedoshi/mindmap`）で、パッケージ時に `resources/app-update.yml` として埋め込まれる。`latest.yml` のファイル名と Release のアセット名を一致させるため、`win.artifactName` でスペースを含まない名前に固定している。
 - アプリケーションメニューは自前で定義している。Electron 既定メニューの `Ctrl+=` / `Ctrl+-` / `Ctrl+0`（ページズーム）がアプリのズームショートカットと衝突するため、ズーム項目を含めていない。
 - electron-vite の出力は `out/main/index.js`（ESM）、`out/preload/index.mjs`、`out/renderer/`。`package.json` の `main` は `out/main/index.js`。レンダラーの `root` を `.` にして Web 版と同じ `index.html` を使う。本番ビルドの HTML には `electron.vite.config.ts` 内のプラグインで CSP の meta を埋め込む（開発時は HMR のため付けない）。
 

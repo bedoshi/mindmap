@@ -39,6 +39,8 @@ git push origin v0.1.0
 
 - `.github/workflows/release.yml` が `v*` タグの push で起動し、Windows 上で lint・型チェック・テスト → `build:electron` → `electron-builder --publish never` を実行して、`release/` 内の `*.exe`・`*.exe.blockmap`・`latest.yml` を GitHub Release に添付する。
 - 対象は Windows（NSIS インストーラ）のみ。macOS / Linux 向けは未対応。
+- 添付するファイル名は `Mindmap-Setup-<version>.exe`（`electron-builder.yml` の `win.artifactName`）。`latest.yml` / `.blockmap` は `electron-updater` の自動アップデートが使うので、必ず一緒に添付する。
+- Release の説明文は自動生成のままなので、必要なら `gh release edit <タグ> --notes ...` で変更点の要約に差し替える。
 - タグ名と `package.json` の `version` は自動では連動しない。インストーラのファイル名は `version` で決まるので、タグを打つ前に揃えておく。
 
 ## 型チェックだけ行う

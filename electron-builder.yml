@@ -5,7 +5,12 @@ directories:
 files:
   - out/**
   - package.json
+publish:
+  provider: github
+  owner: bedoshi
+  repo: mindmap
 win:
+  artifactName: "${productName}-Setup-${version}.${ext}"
   target: nsis
 mac:
   target: dmg

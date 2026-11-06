@@ -23,13 +23,13 @@ MindMeister 風のマインドマップアプリケーション。フロント�
 - マップごとに 1 ファイル（`maps/<UUID>.xml`）で複数マップを扱う。
 - 自動保存（約 0.6 秒のデバウンス）に加えて `Ctrl+S` で即時保存できる。
 - 保存形式は XML のみ。初期試作の JSON 形式は廃止済みで移行処理は無い。
-- 実行時依存は React のみ。Lint は oxlint。単体テストは Vitest + Testing Library（MSW・ESLint・Prettier は未導入）。
+- 実行時依存は React と、Electron の自動アップデート用の `electron-updater`（メインプロセスのみ）。Lint は oxlint。単体テストは Vitest + Testing Library（MSW・ESLint・Prettier は未導入）。
 - コードを変更したら lint・型チェック・テスト（`npm run test:run`）を通してから完了とする。テストの書き方は `mindmap-app-architecture` スキルの「テスト」の節を参照。
 - 後から追加された汎用スキル（`react-ts-*`）と既存のディレクトリ構成・命名には差分がある。各スキルの方針どおり既存規約を優先しており、移行するかどうかは未決定。構成を変える場合は機能変更と分けた独立のタスクで行うこと。
 
 ## 作業状況の注意
 
-- `npm run package`（electron-builder によるインストーラ作成）はまだ動作確認していない。
+- `npm run package`（electron-builder によるインストーラ作成）は Windows で動作確認済み（`release/` にインストーラができる）。GitHub Releases への公開は `.github/workflows/release.yml` が行う。自動アップデートの実際の更新（旧版 → 新版）は、自動アップデート入りの版を 2 つリリースするまで未確認。
 - Electron 版の動作確認は `npx electron . --remote-debugging-port=9333` で起動し、Chrome DevTools Protocol 経由でレンダラーを操作する方法で行った（手順は `mindmap-app-commands` スキル参照）。
 
 ## 詳細情報（Skill）

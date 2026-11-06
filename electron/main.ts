@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
 import path from 'node:path'
 import { registerMapFileHandlers } from './mapFiles'
 import { buildApplicationMenu } from './menu'
+import { checkForUpdates } from './updater'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -37,6 +38,7 @@ void app.whenReady().then(() => {
   Menu.setApplicationMenu(buildApplicationMenu())
   registerMapFileHandlers(ipcMain)
   createWindow()
+  checkForUpdates()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
