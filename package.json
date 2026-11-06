@@ -1,7 +1,7 @@
 {
   "name": "mindmap",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MindMeister 風のマインドマップアプリ",
   "author": "bedoshi",
   "type": "module",
