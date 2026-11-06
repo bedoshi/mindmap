@@ -1,0 +1,13 @@
+appId: dev.bedoshi.mindmap
+productName: Mindmap
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage

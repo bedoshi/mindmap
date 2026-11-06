@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-MindMeister 風のマインドマップ Web アプリケーション。フロントエンドは React + Vite + TypeScript で実装する。バックエンドはなく、マップはブラウザの localStorage に XML 形式で保存する（機能仕様は `docs/spec.md` 参照）。
+MindMeister 風のマインドマップアプリケーション。フロントエンドは React + Vite + TypeScript で実装し、ブラウザで動く Web 版と、同じコードを Electron で包んだデスクトップ版の両方を提供する。バックエンドはなく、Web 版は localStorage、Electron 版は OS のユーザーデータディレクトリ内の XML ファイル（マップごとに 1 ファイル）にマップを保存する（機能仕様は `docs/spec.md` 参照）。
 
 ## 詳細情報（Skill）
 

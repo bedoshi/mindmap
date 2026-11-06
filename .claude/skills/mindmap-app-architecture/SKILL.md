@@ -1,18 +1,28 @@
 ---
 name: mindmap-app-architecture
-description: このリポジトリ（マインドマップWebアプリ）のディレクトリ構成・技術的な決定事項（状態管理、レイアウト計算、保存層の抽象化と XML 形式、lintツール、TypeScript設定の分割など）を把握・変更する際に使う。
+description: このリポジトリ（マインドマップ Web アプリ / Electron アプリ）のディレクトリ構成・技術的な決定事項（状態管理、レイアウト計算、保存層の抽象化と XML 形式、Electron のプロセス構成と IPC、lintツール、TypeScript設定の分割など）を把握・変更する際に使う。
 ---
 
 # 構成
 
 - `src/main.tsx` がエントリーポイント。`src/App.tsx` をルートコンポーネントとしてDOMにマウントする、標準的なVite+Reactの構成。
+- 同じ `index.html` / `src/` を **Web 版**（`vite.config.ts`）と **Electron 版**（`electron.vite.config.ts`）の両方で使う。Electron 固有のコードは `electron/` に置き、レンダラー側は `window.mindmapApi` の有無で保存先を切り替えるだけにしている。
 - Lintは ESLint ではなく **oxlint** を使用（`.oxlintrc.json` で設定）。ESLint系のプラグインは使えないため、lintルールを追加する場合はoxlintの設定方法に従うこと。
-- TypeScript設定は `tsconfig.json` から `tsconfig.app.json`（アプリコード用）と `tsconfig.node.json`（Vite設定など node 側コード用）を参照する分割構成。
-- 追加の依存パッケージは使っていない（React + 標準の DOM / SVG のみ）。状態管理ライブラリや描画ライブラリを導入する場合は、このドキュメントも更新すること。
+- TypeScript設定は `tsconfig.json` から `tsconfig.app.json`（レンダラー / アプリコード用）、`tsconfig.node.json`（Vite 設定など node 側コード用）、`tsconfig.electron.json`（`electron/` 用。Node 型のみで DOM 型なし）を参照する分割構成。`tsc -b` で 3 つまとめて検査する。
+- 実行時の依存パッケージは React のみ。Electron 関連（`electron` / `electron-vite` / `electron-builder`）は devDependencies。状態管理ライブラリや描画ライブラリは使っていない。
 
 ## ディレクトリ構成
 
 ```
+index.html                 Web 版・Electron 版共通のエントリ HTML
+vite.config.ts             Web 版の Vite 設定
+electron.vite.config.ts    Electron 版の electron-vite 設定（main / preload / renderer）
+electron-builder.yml       インストーラ作成（electron-builder）の設定
+electron/
+  main.ts                  メインプロセス: ウィンドウ生成、メニュー、IPC ハンドラ登録
+  preload.ts               contextBridge で window.mindmapApi を公開
+  mapFiles.ts              保存ディレクトリの解決と maps/<id>.xml の読み書き（IPC ハンドラ本体）
+  menu.ts                  アプリケーションメニュー（ズーム系ショートカットを除いた最小構成）
 src/
   main.tsx                 エントリーポイント
   App.tsx                  保存先の生成、useMapLibrary の呼び出し、MindMapEditor の描画
@@ -25,8 +35,11 @@ src/
   storage/
     types.ts               MapStorage / MapSummary（保存先の抽象インターフェース）
     xml.ts                 MindMap ⇔ XML の相互変換、タイトル取得
-    localStorageStorage.ts localStorage への保存
-    index.ts               createStorage(): 保存先の MapStorage を返す
+    localStorageStorage.ts Web 版の保存先（localStorage）
+    electronStorage.ts     Electron 版の保存先（window.mindmapApi 経由でファイル）
+    electronApi.ts         preload が公開する API の型と IPC チャンネル名（electron/ と共有）
+    window.d.ts            window.mindmapApi の型宣言
+    index.ts               createStorage(): 実行環境に応じた MapStorage を返す
   hooks/
     useMindMap.ts          開いている 1 マップの履歴付き状態管理（Undo/Redo）
     useMapLibrary.ts       複数マップの一覧・切り替え・作成・削除と自動保存
@@ -62,9 +75,22 @@ src/
 
 ## 保存層（`src/storage/`）
 
-- `MapStorage` インターフェース（`list / load / save / remove / describeLocation`）で保存先を抽象化し、`createStorage()` が実装を返す。別の保存先（ファイルなど）を足すときは、このインターフェースの実装を追加して `createStorage()` で切り替える。
-- **XML が正規の保存形式**。localStorage でも値には XML 文字列を入れ、一覧表示用にタイトルと更新日時を JSON で添えている。書き出し/読み込みのファイルも同じ XML。
-- XML のシリアライズは `xml.ts` で自前の文字列組み立て（インデント付き）、パースはブラウザ標準の `DOMParser`。
+- `MapStorage` インターフェース（`list / load / save / remove / describeLocation`）で保存先を抽象化し、`createStorage()` が `window.mindmapApi` の有無で実装を選ぶ。
+- **XML が正規の保存形式**。Web 版（localStorage）でも値には XML 文字列を入れ、一覧表示用にタイトルと更新日時を JSON で添えている。書き出し/読み込みのファイルも同じ XML。
+- XML のシリアライズは `xml.ts` で自前の文字列組み立て（インデント付き）、パースはブラウザ標準の `DOMParser`。どちらもレンダラー側で行い、Electron のメインプロセスはファイルの読み書きだけを担当する（Node には DOMParser が無いため）。
+- Electron 版の一覧取得は、ファイル一覧を取ったあと各ファイルを読み込んでタイトルを取り出す。マップ数が多くなって遅くなる場合は、メタ情報の別ファイル化を検討する。
+
+## Electron 構成（`electron/`）
+
+- メインプロセス（`main.ts`）・preload（`preload.ts`）・レンダラー（`src/`）の 3 層。`contextIsolation: true` / `nodeIntegration: false`。preload は ESM（`.mjs`）で出力されるため `sandbox: false` にしている。
+- レンダラーとメインの通信は `ipcRenderer.invoke` / `ipcMain.handle`。チャンネル名と API の型は `src/storage/electronApi.ts` に一元化し、`electron/` 側からも import する。
+- 保存ディレクトリ（`mapFiles.ts` の `resolveDataDir`）は OS ごとに次の通り。環境変数 `MINDMAP_DATA_DIR` があれば優先する。
+  - Windows: `%LOCALAPPDATA%\mindmap`
+  - macOS: `~/Library/Application Support/mindmap`
+  - Linux: `$XDG_DATA_HOME/mindmap`（未設定なら `~/.local/share/mindmap`）
+- マップファイルは `<データディレクトリ>/maps/<id>.xml`。ID は `[A-Za-z0-9_-]+` に限定してパストラバーサルを防ぎ、書き込みは一時ファイルに書いてから `rename` で置き換える。
+- アプリケーションメニューは自前で定義している。Electron 既定メニューの `Ctrl+=` / `Ctrl+-` / `Ctrl+0`（ページズーム）がアプリのズームショートカットと衝突するため、ズーム項目を含めていない。
+- electron-vite の出力は `out/main/index.js`（ESM）、`out/preload/index.mjs`、`out/renderer/`。`package.json` の `main` は `out/main/index.js`。レンダラーの `root` を `.` にして Web 版と同じ `index.html` を使う。本番ビルドの HTML には `electron.vite.config.ts` 内のプラグインで CSP の meta を埋め込む（開発時は HMR のため付けない）。
 
 ## レイアウト（`src/model/layout.ts`）
 
