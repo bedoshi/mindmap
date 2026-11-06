@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Electron のビルド成果物
+out
+release
 *.local
 
 # Editor directories and files
