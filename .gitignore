@@ -13,6 +13,8 @@ dist-ssr
 # Electron のビルド成果物
 out
 release
+# テストのカバレッジレポート
+coverage
 *.local
 
 # Editor directories and files
