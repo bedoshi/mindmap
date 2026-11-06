@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `mindmap-app-commands` — ビルド・開発サーバー・lintなどのコマンド
 - `mindmap-app-architecture` — ディレクトリ構成・技術的な決定事項
 - `react-ts-structure-naming-rules` — React + TypeScript のディレクトリ構成（feature 単位）・依存方向・import・命名規則
+- `react-ts-component-design-rules` — React + TypeScript のコンポーネント設計（関数コンポーネント・Props の型・責務の分け方・state と副作用・JSX の書き方）
 - `react-ts-test-lint-rules` — テストコード（Vitest / Testing Library / MSW）の書き方と ESLint / Prettier の設定ルール
 
 ## ドキュメント更新ルール
