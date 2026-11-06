@@ -10,3 +10,7 @@ description: このリポジトリ（マインドマップWebアプリ）のデ�
 - TypeScript設定は `tsconfig.json` から `tsconfig.app.json`（アプリコード用）と `tsconfig.node.json`（Vite設定など node 側コード用）を参照する分割構成。
 
 マインドマップ機能（ノードの描画、編集、保存など）はまだ実装されていない。今後実装する際は、このセクションを実際のアーキテクチャ（状態管理方法、データ永続化の方式など）に合わせて更新すること。
+
+## 改行コード
+
+- 改行コードは LF に統一する。`.gitattributes`（`* text=auto eol=lf`）で、チェックアウト時・コミット時ともに LF を保つ。Windows の `core.autocrlf` の設定には依存しない。
