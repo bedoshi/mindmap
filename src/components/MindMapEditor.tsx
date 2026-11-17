@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { renderMapPng } from '../export/mapImage'
+import { imageFileName, renderMapPng } from '../export/mapImage'
 import { downloadBlob, saveImage } from '../export/saveImage'
 import type { MapLibrary } from '../hooks/useMapLibrary'
 import { useMindMap } from '../hooks/useMindMap'
@@ -79,8 +79,6 @@ const MIN_ZOOM = 0.2
 const MAX_ZOOM = 3
 const DRAG_THRESHOLD = 6
 const DOUBLE_TAP_MS = 400
-
-const IMAGE_FILE_EXTENSION = '.png'
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
@@ -318,7 +316,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
    */
   const exportImage = useCallback(async () => {
     try {
-      const result = await saveImage(await renderMapPng(map), `${titleOf(map)}${IMAGE_FILE_EXTENSION}`)
+      const result = await saveImage(await renderMapPng(map), imageFileName())
       if (result.status === 'saved' && result.path) showMessage(`画像を保存しました: ${result.path}`)
     } catch {
       showMessage('画像の書き出しに失敗しました')

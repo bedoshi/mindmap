@@ -7,6 +7,7 @@ import {
   MAX_CANVAS_SIDE,
   computeImageSize,
   drawMapImage,
+  imageFileName,
   renderMapPng,
 } from './mapImage'
 
@@ -129,5 +130,16 @@ describe('drawMapImage', () => {
 describe('renderMapPng', () => {
   it('Canvas が使えない環境では例外になる（jsdom では getContext が null）', async () => {
     await expect(renderMapPng(createMindMap('中心'))).rejects.toThrow()
+  })
+})
+
+describe('imageFileName', () => {
+  it('mindmap-export-YYYYMMDDHHmmss.png の形式で、ローカル時刻から作る', () => {
+    expect(imageFileName(new Date(2026, 10, 17, 14, 5, 9))).toBe('mindmap-export-20261117140509.png')
+  })
+
+  it('月・日・時・分・秒は 2 桁にゼロ埋めし、時は 24 時間表記にする', () => {
+    expect(imageFileName(new Date(2026, 0, 2, 3, 4, 5))).toBe('mindmap-export-20260102030405.png')
+    expect(imageFileName(new Date(2026, 11, 31, 23, 59, 59))).toBe('mindmap-export-20261231235959.png')
   })
 })

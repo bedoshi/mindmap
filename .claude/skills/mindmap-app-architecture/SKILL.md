@@ -50,7 +50,7 @@ src/
     window.d.ts            window.mindmapApi の型宣言
     index.ts               createStorage(): 実行環境に応じた MapStorage を返す
   export/
-    mapImage.ts            マップ全体を PNG にする（画像サイズの計算、Canvas への描画、Blob 化）
+    mapImage.ts            マップ全体を PNG にする（画像サイズの計算、Canvas への描画、Blob 化、ファイル名の生成）
     saveImage.ts           画像の保存先の切り替え（Electron: 保存ダイアログ / Web: ダウンロード）
   hooks/
     useMindMap.ts          開いている 1 マップの履歴付き状態管理（Undo/Redo）

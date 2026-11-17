@@ -25,6 +25,17 @@ const LIGHT_TEXT_COLOR = '#ffffff'
 const PLACEHOLDER_TEXT = '（空）'
 const PLACEHOLDER_ALPHA = 0.6
 
+export const IMAGE_FILE_EXTENSION = '.png'
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/** 書き出し時のファイル名。`mindmap-export-YYYYMMDDHHmmss.png`（ローカル時刻・24 時間表記） */
+export function imageFileName(now: Date = new Date()): string {
+  const date = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}`
+  const time = `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
+  return `mindmap-export-${date}${time}${IMAGE_FILE_EXTENSION}`
+}
+
 export interface ImageSize {
   /** 出力する画像の幅（px） */
   width: number
