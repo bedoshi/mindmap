@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import path from 'node:path'
+import { registerImageFileHandlers } from './imageFiles'
 import { registerMapFileHandlers } from './mapFiles'
 import { buildApplicationMenu } from './menu'
 import { checkForUpdates } from './updater'
@@ -37,6 +38,11 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   Menu.setApplicationMenu(buildApplicationMenu())
   registerMapFileHandlers(ipcMain)
+  registerImageFileHandlers(ipcMain, {
+    dialog,
+    fromWebContents: (webContents) => BrowserWindow.fromWebContents(webContents),
+    downloadsDir: () => app.getPath('downloads'),
+  })
   createWindow()
   checkForUpdates()
 

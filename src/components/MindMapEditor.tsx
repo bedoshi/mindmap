@@ -8,6 +8,8 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { imageFileName, renderMapPng } from '../export/mapImage'
+import { downloadBlob, saveImage } from '../export/saveImage'
 import type { MapLibrary } from '../hooks/useMapLibrary'
 import { useMindMap } from '../hooks/useMindMap'
 import { computeLayout } from '../model/layout'
@@ -305,13 +307,21 @@ export function MindMapEditor({ initialMap, library }: Props) {
 
   const exportXml = useCallback(() => {
     const blob = new Blob([mindMapToXml(map)], { type: 'application/xml' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${titleOf(map)}${XML_FILE_EXTENSION}`
-    anchor.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `${titleOf(map)}${XML_FILE_EXTENSION}`)
   }, [map])
+
+  /**
+   * 開いているマップ全体を PNG 画像として書き出す（編集中のドラフトや移動中の仮座標は含めない）。
+   * Electron 版は保存ダイアログで保存先を選び、Web 版はブラウザのダウンロードとして保存する。
+   */
+  const exportImage = useCallback(async () => {
+    try {
+      const result = await saveImage(await renderMapPng(map), imageFileName())
+      if (result.status === 'saved' && result.path) showMessage(`画像を保存しました: ${result.path}`)
+    } catch {
+      showMessage('画像の書き出しに失敗しました')
+    }
+  }, [map, showMessage])
 
   /** XML ファイルを新しいマップとして取り込み、そのマップを開く */
   const importXml = useCallback(
@@ -655,6 +665,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
         onFit={fitToView}
         onSave={() => void saveNow()}
         onExport={exportXml}
+        onExportImage={() => void exportImage()}
         onImport={() => fileInputRef.current?.click()}
       />
       <input

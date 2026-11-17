@@ -25,6 +25,8 @@ electron/
   preload.ts               contextBridge で window.mindmapApi を公開
   mapFiles.ts              保存ディレクトリの解決と maps/<id>.xml の読み書き（IPC ハンドラ本体）
   mapFiles.test.ts         ↑のテスト（Node 環境）
+  imageFiles.ts            PNG 画像の保存（保存ダイアログを開く IPC ハンドラ、ファイル名の整形、書き込み）
+  imageFiles.test.ts       ↑のテスト（Node 環境。ダイアログ部分は対象外）
   updater.ts               自動アップデート（electron-updater。パッケージ化された起動時だけ有効）
   menu.ts                  アプリケーションメニュー（ズーム系ショートカットを除いた最小構成）
 src/
@@ -47,6 +49,9 @@ src/
     electronApi.ts         preload が公開する API の型と IPC チャンネル名（electron/ と共有）
     window.d.ts            window.mindmapApi の型宣言
     index.ts               createStorage(): 実行環境に応じた MapStorage を返す
+  export/
+    mapImage.ts            マップ全体を PNG にする（画像サイズの計算、Canvas への描画、Blob 化、ファイル名の生成）
+    saveImage.ts           画像の保存先の切り替え（Electron: 保存ダイアログ / Web: ダウンロード）
   hooks/
     useMindMap.ts          開いている 1 マップの履歴付き状態管理（Undo/Redo）
     useMapLibrary.ts       複数マップの一覧・切り替え・作成・削除と自動保存
@@ -89,6 +94,14 @@ src/
 - XML では `mindmap` 直下の最初の `node` がメインのルート、2 つ目以降がフローティングノード。シリアライズ時に `computeLayout` を呼び、表示されている全ノードの中心座標を `x / y` として書き出す（根以外は参考情報で、読み込み時は根の `x / y` だけを使う）。0 は省略時と同じなので読み込み時は持たない。
 - XML のシリアライズは `xml.ts` で自前の文字列組み立て（インデント付き）、パースはブラウザ標準の `DOMParser`。どちらもレンダラー側で行い、Electron のメインプロセスはファイルの読み書きだけを担当する（Node には DOMParser が無いため）。
 - Electron 版の一覧取得は、ファイル一覧を取ったあと各ファイルを読み込んでタイトルを取り出す。マップ数が多くなって遅くなる場合は、メタ情報の別ファイル化を検討する。
+
+## 画像書き出し（`src/export/`）
+
+- `mapImage.ts` は `computeLayout` の結果（`nodes` / `edges` / `bounds`）を Canvas 2D に直接描く。接続線は `layout.ts` が返す SVG パス文字列をそのまま `Path2D` に渡している。画面の DOM は使わないので、パン/ズームや画面外のノードの影響を受けない。
+- 画像サイズは `computeImageSize`（`bounds` + 余白 40px、倍率 2 を既定）。Canvas の 1 辺（16,384px）と総画素数（1 億）の上限を超えるときは倍率を下げる。
+- 描画は `drawMapImage`。`NodeView` / `App.css` の見た目（根は 24px の丸み・ダーク色、深さ 1 は枝の色で塗りつぶし、深さ 2 以降は白地に 2px の枠線）と対応しているため、ノードのスタイルを変えるときはここも合わせる。配色は画面のテーマに依存せずライトテーマ固定。
+- 書き出しは確定済みの `map` から `computeLayout` を計算し直す（編集中のドラフトや根の移動中の仮座標は含めない）。
+- `saveImage.ts` が保存先を切り替える。`window.mindmapApi` があれば `saveImage` IPC（メインプロセスが `dialog.showSaveDialog` を開き、初期位置は OS のダウンロードフォルダ）、なければ `<a download>` によるブラウザのダウンロード。
 
 ## Electron 構成（`electron/`）
 
@@ -136,4 +149,5 @@ src/
   - 純粋関数（`model/`、`storage/xml.ts`）は入出力で検証する。「変更が無ければ同じ参照を返す」という約束も `toBe` で検証している。
   - hook は `renderHook` + `act`。`useMapLibrary` は `MapStorage` をメモリ実装のテストダブルに差し替えて検証する。デバウンス保存は実時間で待つ（`waitFor` の timeout を延長）。
   - `MindMapEditor` は `MapLibrary` 型のモックを渡し、キーボード操作（Tab / Enter / Delete / Ctrl+S）とツールバー・一覧パネルの操作をユーザー視点で検証する。ノードのドラッグは jsdom に `elementFromPoint` が無いためテストしていない。
+  - 画像書き出し（`src/export/`）: 画像サイズの計算は入出力で、描画は呼び出しを記録する偽の Canvas コンテキスト（Proxy）で検証する。jsdom には Canvas の実装が無い（`getContext` は null を返すモック）ので、実際の見た目は Chromium で目視確認すること。保存先の切り替えは `window.mindmapApi` を差し替えて検証する。
   - Electron のメインプロセス（`main.ts` / `menu.ts` / `preload.ts`）は Electron 本体に依存するためテスト対象外。ファイル入出力（`mapFiles.ts`）は一時ディレクトリと `MINDMAP_DATA_DIR` で検証する。

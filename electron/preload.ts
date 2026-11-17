@@ -10,6 +10,8 @@ const api: MindmapApi = {
   writeMap: (id, xml) => ipcRenderer.invoke(IPC_CHANNELS.writeMap, id, xml) as Promise<void>,
   deleteMap: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteMap, id) as Promise<void>,
   getDataDir: () => ipcRenderer.invoke(IPC_CHANNELS.getDataDir) as Promise<string>,
+  saveImage: (defaultName, data) =>
+    ipcRenderer.invoke(IPC_CHANNELS.saveImage, defaultName, data) as Promise<string | null>,
 }
 
 contextBridge.exposeInMainWorld('mindmapApi', api)
