@@ -18,6 +18,7 @@ interface Props {
   onFit: () => void
   onSave: () => void
   onExport: () => void
+  onExportImage: () => void
   onImport: () => void
   onToggleMapList: () => void
 }
@@ -82,6 +83,9 @@ export function Toolbar(props: Props) {
       <div className="toolbar-group">
         <button type="button" onClick={props.onExport} title="XMLファイルとして書き出す">
           書き出し
+        </button>
+        <button type="button" onClick={props.onExportImage} title="マップ全体をPNG画像として書き出す">
+          画像書き出し
         </button>
         <button type="button" onClick={props.onImport} title="XMLファイルを新しいマップとして読み込む">
           読み込み

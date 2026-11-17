@@ -186,4 +186,13 @@ describe('MindMapEditor', () => {
     expect(vi.mocked(library.reportChange).mock.lastCall?.[0].floatingRootIds).toEqual([])
     expect(screen.getByRole('button', { name: '削除' })).toBeDisabled()
   })
+
+  it('画像書き出しは、PNG 画像を作れない環境ではエラーメッセージを表示する（jsdom では Canvas が使えない）', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+
+    await user.click(screen.getByRole('button', { name: '画像書き出し' }))
+
+    expect(await screen.findByText('画像の書き出しに失敗しました')).toBeInTheDocument()
+  })
 })

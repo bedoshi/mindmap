@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
   writeMap: 'maps:write',
   deleteMap: 'maps:delete',
   getDataDir: 'maps:dataDir',
+  saveImage: 'export:saveImage',
 } as const
 
 export interface MapFileInfo {
@@ -26,4 +27,10 @@ export interface MindmapApi {
   deleteMap(id: string): Promise<void>
   /** マップファイルを保存しているディレクトリの絶対パス */
   getDataDir(): Promise<string>
+  /**
+   * 保存ダイアログを開き、選ばれた場所に PNG 画像を保存する。
+   * @param defaultName ダイアログに最初に表示するファイル名
+   * @returns 保存したファイルの絶対パス。ダイアログがキャンセルされたときは null
+   */
+  saveImage(defaultName: string, data: Uint8Array): Promise<string | null>
 }
