@@ -15,6 +15,7 @@ import {
   insertTableRow,
   isDescendant,
   moveNode,
+  moveNodeTo,
   moveRoot,
   nodeToSelectAfterRemove,
   removeNode,
@@ -258,6 +259,109 @@ describe('moveNode', () => {
     const next = moveNode(collapsed, 'b', 'a')
 
     expect(next.nodes['a'].collapsed).toBe(false)
+  })
+
+  it('同じ親の中で並べ替えられる。index は自分を除いた並びでの位置', () => {
+    const { map } = buildMap()
+
+    expect(moveNode(map, 'a2', 'a', 0).nodes['a'].children).toEqual(['a2', 'a1'])
+    expect(moveNode(map, 'a1', 'a').nodes['a'].children).toEqual(['a2', 'a1'])
+  })
+
+  it('同じ親の同じ位置への移動は、同じマップをそのまま返す', () => {
+    const { map } = buildMap()
+
+    expect(moveNode(map, 'a1', 'a', 0)).toBe(map)
+    expect(moveNode(map, 'a2', 'a')).toBe(map)
+  })
+
+  it('ルート直下では side を指定して左右を入れ替えられる。省略時は同じルートの中なら今の側のまま', () => {
+    const { map, rootId } = buildMap()
+
+    const toLeft = moveNode(map, 'a', rootId, undefined, 'left')
+
+    expect(toLeft.nodes['a'].side).toBe('left')
+    expect(moveNode(map, 'a', rootId, 0).nodes['a'].side).toBe('right')
+    expect(moveNode(map, 'a', rootId, 0, 'right')).toBe(map)
+  })
+})
+
+describe('moveNodeTo', () => {
+  /** ルート直下に右の r1, r2、左の l1。r1 の下に c1, c2, c3 */
+  function buildSides() {
+    let map = createMindMap('中心')
+    const rootId = map.rootId
+    map = addChild(map, rootId, 'r1', 'R1')
+    map = addChild(map, rootId, 'l1', 'L1')
+    map = addChild(map, rootId, 'r2', 'R2')
+    map = moveNode(map, 'r2', rootId, undefined, 'right')
+    map = addChild(map, 'r1', 'c1', 'C1')
+    map = addChild(map, 'r1', 'c2', 'C2')
+    map = addChild(map, 'r1', 'c3', 'C3')
+    return { map, rootId }
+  }
+
+  it('before / after で兄弟の前・後ろに並べ替える', () => {
+    const { map } = buildSides()
+
+    expect(moveNodeTo(map, 'c3', 'c1', 'before').nodes['r1'].children).toEqual(['c3', 'c1', 'c2'])
+    expect(moveNodeTo(map, 'c1', 'c2', 'after').nodes['r1'].children).toEqual(['c2', 'c1', 'c3'])
+    expect(moveNodeTo(map, 'c1', 'c3', 'after').nodes['r1'].children).toEqual(['c2', 'c3', 'c1'])
+  })
+
+  it('並びが変わらないドロップは同じマップをそのまま返す', () => {
+    const { map } = buildSides()
+
+    expect(moveNodeTo(map, 'c1', 'c2', 'before')).toBe(map)
+    expect(moveNodeTo(map, 'c2', 'c1', 'after')).toBe(map)
+    expect(moveNodeTo(map, 'c1', 'c1', 'after')).toBe(map)
+  })
+
+  it('別の親のノードの前・後ろに置くと、その親の子として付け替える', () => {
+    const { map } = buildSides()
+
+    const next = moveNodeTo(map, 'c2', 'r2', 'before')
+
+    expect(next.nodes['c2'].parentId).toBe(next.rootId)
+    expect(next.nodes['c2'].side).toBe('right')
+    expect(next.nodes['r1'].children).toEqual(['c1', 'c3'])
+    const rootChildren = next.nodes[next.rootId].children
+    expect(rootChildren.indexOf('c2')).toBe(rootChildren.indexOf('r2') - 1)
+  })
+
+  it('反対側にあるルート直下のノードの前・後ろに置くと、そのノードと同じ側に移る', () => {
+    const { map } = buildSides()
+
+    const next = moveNodeTo(map, 'r2', 'l1', 'after')
+
+    expect(next.nodes['r2'].side).toBe('left')
+    const rootChildren = next.nodes[next.rootId].children
+    expect(rootChildren.indexOf('r2')).toBe(rootChildren.indexOf('l1') + 1)
+  })
+
+  it('ルートを子にするドロップでは side の側に置く。同じ側なら変化なし', () => {
+    const { map, rootId } = buildSides()
+
+    expect(moveNodeTo(map, 'r1', rootId, 'child', 'left').nodes['r1'].side).toBe('left')
+    expect(moveNodeTo(map, 'l1', rootId, 'child', 'right').nodes['l1'].side).toBe('right')
+    // すでに末尾にあり、側も同じなら変化しない
+    expect(moveNodeTo(map, 'r2', rootId, 'child', 'right')).toBe(map)
+  })
+
+  it('ルートに対して before / after を指定しても子として扱う', () => {
+    const { map, rootId } = buildSides()
+
+    const next = moveNodeTo(map, 'c1', rootId, 'before', 'left')
+
+    expect(next.nodes['c1']).toMatchObject({ parentId: rootId, side: 'left' })
+  })
+
+  it('child で別のノードの子にする。自分の子孫へは移動できない', () => {
+    const { map } = buildSides()
+
+    expect(moveNodeTo(map, 'c1', 'l1', 'child').nodes['l1'].children).toEqual(['c1'])
+    expect(moveNodeTo(map, 'r1', 'c1', 'child')).toBe(map)
+    expect(moveNodeTo(map, 'r1', 'c1', 'after')).toBe(map)
   })
 })
 

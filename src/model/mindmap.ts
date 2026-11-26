@@ -182,14 +182,33 @@ export function toggleCollapse(map: MindMap, id: NodeId): MindMap {
 }
 
 /**
- * id を newParentId の子に付け替える。index 省略時は末尾に追加する。
- * ルートの移動や、自分自身・自分の子孫への移動は無視する。
+ * id を newParentId の子に付け替える（同じ親の中での並べ替えも含む）。
+ * index は id を取り除いたあとの兄弟の並びでの挿入位置で、省略時は末尾に追加する。
+ * side は newParentId がルートのときの配置側。省略時は、同じルートの中の移動なら今の側のまま、
+ * 別の親からの移動ならノード数の少ない側にする。
+ * ルートの移動や、自分自身・自分の子孫への移動、位置も側も変わらない移動は無視する（同じ参照を返す）。
  */
-export function moveNode(map: MindMap, id: NodeId, newParentId: NodeId, index?: number): MindMap {
+export function moveNode(
+  map: MindMap,
+  id: NodeId,
+  newParentId: NodeId,
+  index?: number,
+  side?: Side,
+): MindMap {
   const node = map.nodes[id]
   const newParent = map.nodes[newParentId]
   if (!node || !newParent || node.parentId === null) return map
   if (isDescendant(map, id, newParentId)) return map
+  const toRoot = newParent.parentId === null
+  const sameParent = node.parentId === newParentId
+
+  if (sameParent) {
+    const currentIndex = newParent.children.indexOf(id)
+    const lastIndex = newParent.children.length - 1
+    const insertAt = index === undefined ? lastIndex : Math.max(0, Math.min(index, lastIndex))
+    const sameSide = !toRoot || side === undefined || (node.side ?? 'right') === side
+    if (insertAt === currentIndex && sameSide) return map
+  }
 
   const nodes = { ...map.nodes }
   const oldParent = nodes[node.parentId]
@@ -201,9 +220,39 @@ export function moveNode(map: MindMap, id: NodeId, newParentId: NodeId, index?: 
   children.splice(insertAt, 0, id)
   nodes[newParentId] = { ...target, children, collapsed: false }
 
-  const side = newParent.parentId === null ? pickSide({ ...map, nodes }, newParentId) : undefined
-  nodes[id] = withSide({ ...node, parentId: newParentId }, side)
+  const resolvedSide = !toRoot
+    ? undefined
+    : (side ?? (sameParent ? (node.side ?? 'right') : pickSide({ ...map, nodes }, newParentId)))
+  nodes[id] = withSide({ ...node, parentId: newParentId }, resolvedSide)
   return { ...map, nodes }
+}
+
+/** ドロップ先のノードに対してどこへ置くか（前の兄弟 / 後ろの兄弟 / 子） */
+export type DropPosition = 'before' | 'after' | 'child'
+
+/**
+ * id を targetId の前・後ろ（兄弟として）または子に移動する。
+ * 兄弟として置く場合、ドロップ先がルートの直下なら、ドロップ先と同じ側に置く（左右の移動）。
+ * 子として置く場合の side は、ドロップ先がルートのときの配置側（省略時は moveNode と同じ）。
+ * ドロップ先がルートのときは常に子として置く。移動できない・変化が無い場合は同じ参照を返す
+ */
+export function moveNodeTo(
+  map: MindMap,
+  id: NodeId,
+  targetId: NodeId,
+  position: DropPosition,
+  side?: Side,
+): MindMap {
+  const target = map.nodes[targetId]
+  if (!target || !map.nodes[id] || id === targetId) return map
+  if (position === 'child' || target.parentId === null) {
+    return moveNode(map, id, targetId, undefined, side)
+  }
+  const parent = map.nodes[target.parentId]
+  const siblings = parent.children.filter((c) => c !== id)
+  const index = siblings.indexOf(targetId) + (position === 'after' ? 1 : 0)
+  const targetSide = parent.parentId === null ? (target.side ?? 'right') : undefined
+  return moveNode(map, id, parent.id, index, targetSide)
 }
 
 // ---- テーブルノード ----

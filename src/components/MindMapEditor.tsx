@@ -16,20 +16,21 @@ import { computeLayout } from '../model/layout'
 import {
   countSubtree,
   expandAncestors,
-  isDescendant,
+  moveNodeTo,
   moveRoot,
   newId,
   nodeToSelectAfterRemove,
   updateTableCell,
   updateText,
   visibleChildren,
+  type DropPosition,
 } from '../model/mindmap'
 import { findMatches, isSearchable } from '../model/search'
-import type { MindMap, NodeId } from '../model/types'
+import type { MindMap, NodeId, Side } from '../model/types'
 import { XML_FILE_EXTENSION, mindMapToXml, titleOf, xmlToMindMap } from '../storage/xml'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { MapListPanel } from './MapListPanel'
-import { NodeView } from './NodeView'
+import { NodeView, type DropIndicator } from './NodeView'
 import { SearchBar } from './SearchBar'
 import { Toolbar } from './Toolbar'
 
@@ -99,12 +100,25 @@ interface RootMoveVisual {
   y: number
 }
 
+/** ドラッグ中のノードのドロップ先 */
+interface DropTarget {
+  id: NodeId
+  /** ドロップ先の前・後ろに兄弟として置くか、子にするか */
+  position: DropPosition
+  /** ドロップ先がルートのとき、子をどちら側に置くか（ルートの左半分なら左） */
+  side?: Side
+}
+
 interface NodeDragVisual {
   id: NodeId
   x: number
   y: number
-  targetId: NodeId | null
+  /** 移動できる（位置か側が変わる）ドロップ先。無ければ null */
+  target: DropTarget | null
 }
+
+/** ノードの上端・下端からこの割合の範囲にドロップすると、子ではなく前・後ろの兄弟として置く */
+const SIBLING_DROP_RATIO = 0.3
 
 const MIN_ZOOM = 0.2
 const MAX_ZOOM = 3
@@ -113,6 +127,13 @@ const DOUBLE_TAP_MS = 400
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+}
+
+/** ドロップ先の表示（NodeView に渡す）。ルートへのドロップは子を置く側で表す */
+function dropIndicatorOf(target: DropTarget | null, id: NodeId): DropIndicator | null {
+  if (!target || target.id !== id) return null
+  if (target.side) return target.side
+  return target.position
 }
 
 /** 要素がテーブルノードのセル（またはその中）なら、そのセルの位置を返す */
@@ -794,18 +815,28 @@ export function MindMapEditor({ initialMap, library }: Props) {
     const hit = document
       .elementFromPoint(e.clientX, e.clientY)
       ?.closest<HTMLElement>('[data-node-id]')
-    const targetId = hit?.dataset.nodeId ?? null
-    const dragged = map.nodes[drag.id]
-    const valid =
-      targetId !== null &&
-      targetId !== dragged.parentId &&
-      map.nodes[targetId] !== undefined &&
-      !isDescendant(map, drag.id, targetId)
+    const targetId = hit?.dataset.nodeId
+    let target: DropTarget | null = null
+    if (hit && targetId && map.nodes[targetId]) {
+      const box = hit.getBoundingClientRect()
+      if (map.nodes[targetId].parentId === null) {
+        // ルートへのドロップは子にする。ルートの左半分なら左側、右半分なら右側に置く
+        const side: Side = e.clientX < box.left + box.width / 2 ? 'left' : 'right'
+        target = { id: targetId, position: 'child', side }
+      } else {
+        const ratio = (e.clientY - box.top) / box.height
+        const position: DropPosition =
+          ratio < SIBLING_DROP_RATIO ? 'before' : ratio > 1 - SIBLING_DROP_RATIO ? 'after' : 'child'
+        target = { id: targetId, position }
+      }
+      // 自分自身・子孫へのドロップや、位置も側も変わらないドロップは無効にする
+      if (moveNodeTo(map, drag.id, target.id, target.position, target.side) === map) target = null
+    }
     setNodeDrag({
       id: drag.id,
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-      targetId: valid ? targetId : null,
+      target,
     })
   }
 
@@ -861,8 +892,9 @@ export function MindMapEditor({ initialMap, library }: Props) {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId)
     }
-    if (drag?.kind === 'node' && drag.moved && nodeDrag?.targetId) {
-      store.move(drag.id, nodeDrag.targetId)
+    if (drag?.kind === 'node' && drag.moved && nodeDrag?.target) {
+      const { id, position, side } = nodeDrag.target
+      store.moveTo(drag.id, id, position, side)
     }
     if (drag?.kind === 'root' && drag.moved && rootMove) {
       store.moveRoot(drag.id, Math.round(rootMove.x), Math.round(rootMove.y))
@@ -1036,7 +1068,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
                 draft={editing?.id === node.id ? editing.draft : null}
                 selectAllOnFocus={editing?.id === node.id ? editing.selectAll : false}
                 dragging={nodeDrag?.id === node.id}
-                dropTarget={nodeDrag?.targetId === node.id}
+                dropIndicator={dropIndicatorOf(nodeDrag?.target ?? null, node.id)}
                 hiddenCount={countSubtree(map, node.id) - 1}
                 searchQuery={searchQuery}
                 searchCurrent={currentMatch === node.id}
@@ -1071,7 +1103,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
       )}
       <div className="help">
         Tab: 子を追加 / Enter: 兄弟を追加 / Delete: 削除 / F2・ダブルクリック: 編集 / 矢印キー: 移動 /
-        ドラッグ: 付け替え・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存 / Ctrl+F: 検索 / 右クリック: メニュー（テーブルの追加・行と列の編集）
+        ドラッグ: 付け替え（中央へ）・並び替え（上端 / 下端へ）・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存 / Ctrl+F: 検索 / 右クリック: メニュー（テーブルの追加・行と列の編集）
       </div>
       {(message ?? errorMessage) && <div className="message">{message ?? errorMessage}</div>}
     </div>

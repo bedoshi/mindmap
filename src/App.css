@@ -167,6 +167,51 @@
   left: -12px;
 }
 
+/*
+ * 兄弟として前・後ろに置く / ルートの左・右に置くときの挿入位置の線。
+ * 兄弟間の隙間（layout.ts の V_GAP = 14px）の中央あたりに引く
+ */
+.node.drop-before::before,
+.node.drop-after::before,
+.node.drop-left::before,
+.node.drop-right::before {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: #22c55e;
+  pointer-events: none;
+}
+
+.node.drop-before::before,
+.node.drop-after::before {
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.node.drop-before::before {
+  top: -9px;
+}
+
+.node.drop-after::before {
+  bottom: -9px;
+}
+
+.node.drop-left::before,
+.node.drop-right::before {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.node.drop-left::before {
+  left: -9px;
+}
+
+.node.drop-right::before {
+  right: -9px;
+}
+
 /* ---- テーブルノード ---- */
 
 /*
