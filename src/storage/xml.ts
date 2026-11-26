@@ -46,6 +46,8 @@ function escapeText(value: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    // 改行も文字参照にして、1 行の row 要素が XML 上でも 1 行に収まるようにする
+    .replaceAll('\n', '&#10;')
     .replaceAll('\r', '&#13;')
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
-import type { NodeLayout } from '../model/layout'
+import { splitLines, type NodeLayout } from '../model/layout'
 import type { MindMapNode } from '../model/types'
 import { TableContent, type CellDraft } from './TableContent'
 
@@ -11,6 +11,8 @@ interface Props {
   draft: string | null
   /** 編集開始時にテキスト全体を選択するか */
   selectAllOnFocus: boolean
+  /** Shift+Enter で改行できるか（メインのルートはマップのタイトルなので 1 行に限る） */
+  multiline: boolean
   dragging: boolean
   dropTarget: boolean
   hiddenCount: number
@@ -34,6 +36,7 @@ export function NodeView({
   selected,
   draft,
   selectAllOnFocus,
+  multiline,
   dragging,
   dropTarget,
   hiddenCount,
@@ -48,7 +51,7 @@ export function NodeView({
   onCellCancel,
   onCellTab,
 }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const editing = draft !== null
 
   useEffect(() => {
@@ -59,11 +62,13 @@ export function NodeView({
     else input.setSelectionRange(input.value.length, input.value.length)
   }, [editing, selectAllOnFocus])
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter') {
+      // Shift+Enter は改行（textarea の既定の動作）。改行できないノードでは何もしない
+      if (e.shiftKey && multiline) return
       e.preventDefault()
-      onCommit()
+      if (!e.shiftKey) onCommit()
     } else if (e.key === 'Escape') {
       e.preventDefault()
       onCancel()
@@ -103,9 +108,11 @@ export function NodeView({
           onTab={onCellTab}
         />
       ) : editing ? (
-        <input
+        <textarea
           ref={inputRef}
           className="node-input"
+          rows={splitLines(draft).length}
+          style={{ lineHeight: `${layout.lineHeight}px` }}
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -113,7 +120,10 @@ export function NodeView({
           spellCheck={false}
         />
       ) : (
-        <span className={node.text ? 'node-text' : 'node-text placeholder'}>
+        <span
+          className={node.text ? 'node-text' : 'node-text placeholder'}
+          style={{ lineHeight: `${layout.lineHeight}px` }}
+        >
           {node.text || '（空）'}
         </span>
       )}

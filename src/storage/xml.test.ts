@@ -220,6 +220,26 @@ describe('テーブルノードの XML', () => {
     expect(map.nodes['e'].text).toBe('空')
   })
 
+  it('セル内の改行は &#10; で書き出し、読み込むと改行に戻る', () => {
+    const base = createMindMap('中心')
+    const map = addTableChild(base, base.rootId, 't', [['1 行目\n2 行目']])
+
+    const xml = mindMapToXml(map)
+
+    expect(xml).toContain('<row><cell>1 行目&#10;2 行目</cell></row>')
+    expect(xmlToMindMap(xml).nodes['t'].table).toEqual([['1 行目\n2 行目']])
+  })
+
+  it('ノードのテキストの改行も書き出し・読み込みで元に戻る', () => {
+    const base = createMindMap('中心')
+    const map = addChild(base, base.rootId, 'c', '上の行\n下の行')
+
+    const xml = mindMapToXml(map)
+
+    expect(xml).toContain('text="上の行&#10;下の行"')
+    expect(xmlToMindMap(xml).nodes['c'].text).toBe('上の行\n下の行')
+  })
+
   it('テーブルのフローティングノードも書き出し・読み込みで元に戻る', () => {
     const map = addFloatingTable(createMindMap('中心'), 'f', 400, 300, [['x', 'y']])
 

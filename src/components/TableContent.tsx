@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
-import type { TableLayout } from '../model/layout'
+import { splitLines, type TableLayout } from '../model/layout'
 
 /** 編集中のセルの位置と入力中のテキスト */
 export interface CellDraft {
@@ -17,7 +17,7 @@ interface Props {
   /** 編集の確定。blur が遅れて届いた場合に別のセルを確定しないよう、対象のセル位置を渡す */
   onCommit: (row: number, column: number) => void
   onCancel: () => void
-  /** 編集中に Tab / Shift+Tab を押したとき（確定して隣のセルの編集に移る） */
+  /** 編集中に Tab / Shift+Tab を押したとき（確定して隣のセルの編集に移る）。Shift+Enter はセル内の改行 */
   onTab: (backward: boolean) => void
 }
 
@@ -31,7 +31,7 @@ export function TableContent({
   onCancel,
   onTab,
 }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const editingRow = cellEdit?.row
   const editingColumn = cellEdit?.column
 
@@ -42,9 +42,11 @@ export function TableContent({
     input.select()
   }, [editingRow, editingColumn])
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing || !cellEdit) return
     if (e.key === 'Enter') {
+      // Shift+Enter は改行（textarea の既定の動作）
+      if (e.shiftKey) return
       e.preventDefault()
       onCommit(cellEdit.row, cellEdit.column)
     } else if (e.key === 'Escape') {
@@ -64,7 +66,8 @@ export function TableContent({
       className="node-table"
       style={{
         gridTemplateColumns: layout.columnWidths.map((w) => `${w}px`).join(' '),
-        gridAutoRows: `${layout.rowHeight}px`,
+        gridTemplateRows: layout.rowHeights.map((h) => `${h}px`).join(' '),
+        lineHeight: `${layout.lineHeight}px`,
       }}
     >
       {table.flatMap((cells, row) =>
@@ -82,10 +85,11 @@ export function TableContent({
               data-column={column}
             >
               {editing ? (
-                <input
+                <textarea
                   ref={inputRef}
                   className="cell-input"
                   aria-label={`セル ${row + 1} 行 ${column + 1} 列`}
+                  rows={splitLines(cellEdit.draft).length}
                   value={cellEdit.draft}
                   onChange={(e) => onDraftChange(e.target.value)}
                   onKeyDown={handleKeyDown}

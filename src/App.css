@@ -111,6 +111,9 @@
 .node-text {
   overflow: hidden;
   text-overflow: ellipsis;
+  /* 改行をそのまま表示する（行ごとに中央揃え）。行の高さは layout.ts の値を inline style で指定する */
+  white-space: pre;
+  text-align: center;
 }
 
 .node-text.placeholder {
@@ -118,7 +121,11 @@
 }
 
 .node-input {
+  display: block;
   width: 100%;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
   min-width: 32px;
   padding: 0;
   margin: 0;
@@ -217,10 +224,15 @@
 .cell-text {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: pre;
 }
 
 .cell-input {
+  display: block;
   width: 100%;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
   min-width: 0;
   padding: 0;
   margin: 0;
@@ -286,7 +298,7 @@
   color: var(--text);
   box-shadow: var(--shadow);
   opacity: 0.85;
-  white-space: nowrap;
+  white-space: pre;
   pointer-events: none;
   transform: translate(12px, 12px);
 }

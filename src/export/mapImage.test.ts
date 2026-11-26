@@ -132,6 +132,23 @@ describe('drawMapImage', () => {
     expect(calls.filter((c) => c.name === 'fillText').map((c) => c.args[0])).toContain('（空）')
   })
 
+  it('改行を含むテキストとセルは、1 行ずつ上から順に描く', () => {
+    vi.stubGlobal('Path2D', class {})
+    let map = createMindMap('中心')
+    map = addChild(map, map.rootId, 'a', '上\n下')
+    map = addTableChild(map, map.rootId, 't', [['セル上\nセル下']])
+    const layout = computeLayout(map)
+    const { ctx, calls } = createFakeContext()
+
+    drawMapImage(ctx, map, layout, computeImageSize(layout.bounds))
+
+    const texts = calls.filter((c) => c.name === 'fillText')
+    const y = (text: string) => texts.find((c) => c.args[0] === text)?.args[2] as number
+    expect(texts.map((c) => c.args[0])).not.toContain('上\n下')
+    expect(y('下') - y('上')).toBe(layout.nodes['a'].lineHeight)
+    expect(y('セル下') - y('セル上')).toBe(layout.nodes['t'].table?.lineHeight)
+  })
+
   it('テーブルノードは空でないセルの文字だけを描き、「（空）」は描かない', () => {
     vi.stubGlobal('Path2D', class {})
     let map = createMindMap('中心')

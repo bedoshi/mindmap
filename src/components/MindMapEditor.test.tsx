@@ -196,6 +196,61 @@ describe('MindMapEditor', () => {
     expect(await screen.findByText('画像の書き出しに失敗しました')).toBeInTheDocument()
   })
 
+  describe('複数行のテキスト', () => {
+    it('子ノードの編集中に Shift+Enter を押すと改行され、Enter で確定する', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor()
+
+      await user.keyboard('{Tab}')
+      await user.type(screen.getByRole('textbox'), '1 行目{Shift>}{Enter}{/Shift}2 行目')
+      expect(screen.getByRole('textbox')).toHaveValue('1 行目\n2 行目')
+      await user.keyboard('{Enter}')
+
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(Object.values(reported!.nodes).map((n) => n.text)).toContain('1 行目\n2 行目')
+    })
+
+    it('フローティングノードでも Shift+Enter で改行できる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+
+      await user.dblClick(container.querySelector('.canvas')!)
+      await user.type(screen.getByRole('textbox'), '上{Shift>}{Enter}{/Shift}下{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(reported!.nodes[reported!.floatingRootIds[0]].text).toBe('上\n下')
+    })
+
+    it('メインのルートでは Shift+Enter で改行せず、編集も確定しない', async () => {
+      const user = userEvent.setup()
+      renderEditor()
+
+      await user.keyboard('{F2}')
+      const input = screen.getByRole('textbox')
+      await user.type(input, '{End}追加{Shift>}{Enter}{/Shift}')
+
+      expect(input).toHaveValue('中心追加')
+      expect(screen.getByRole('textbox')).toBeInTheDocument()
+    })
+
+    it('テーブルのセルでも Shift+Enter で改行できる', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('中心') })
+      await user.click(screen.getByRole('menuitem', { name: '子にテーブルを追加' }))
+      await user.type(
+        screen.getByRole('textbox', { name: 'セル 1 行 1 列' }),
+        '上{Shift>}{Enter}{/Shift}下{Enter}',
+      )
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      const table = Object.values(reported!.nodes).find((n) => n.table)
+      expect(table?.table?.[0][0]).toBe('上\n下')
+    })
+  })
+
   describe('右クリックメニューとテーブル', () => {
     /** 最後に通知されたマップのノード t のテーブル */
     const reportedTable = (library: MapLibrary, id: string) =>
