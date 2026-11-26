@@ -1,0 +1,54 @@
+name: CI
+
+# main への PR と、main への push（PR のマージを含む）で lint・型チェック・テスト・ビルドを確認する
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# 同じ PR（ブランチ）で新しいコミットが push されたら、実行中の古い確認は取り消す
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # テスト・ビルドに Electron 本体（実行ファイル）は不要なので、依存のインストール時に取得しない
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: 型チェック
+        run: pnpm exec tsc -b
+
+      - name: テスト
+        run: pnpm test:run
+
+      - name: ビルド（Web 版）
+        run: pnpm exec vite build
+
+      - name: ビルド（Electron 版）
+        run: pnpm exec electron-vite build
