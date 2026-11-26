@@ -19,6 +19,12 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
   "dependencies": {
     "electron-updater": "^6.8.11",
     "react": "^19.3.1",
