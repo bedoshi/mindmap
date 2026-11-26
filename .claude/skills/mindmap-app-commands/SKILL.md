@@ -1,6 +1,6 @@
 ---
 name: mindmap-app-commands
-description: このリポジトリ（マインドマップWebアプリ / Electronアプリ）でビルド・開発サーバー起動・lint・プレビュー・Electron の起動やパッケージングなど、npm コマンドを実行する際に使う。
+description: このリポジトリ（マインドマップWebアプリ / Electronアプリ）でビルド・開発サーバー起動・lint・プレビュー・Electron の起動やパッケージングなど、pnpm コマンドを実行する際に使う。
 ---
 
 # よく使うコマンド
@@ -8,26 +8,26 @@ description: このリポジトリ（マインドマップWebアプリ / Electro
 ## Web 版
 
 ```bash
-npm install     # 依存パッケージのインストール（Electron 本体のダウンロードも含む）
-npm run dev     # 開発サーバー起動（Vite、ブラウザで http://localhost:5173 を開く）
-npm run build   # 型チェック(tsc -b) + 本番ビルド → dist/
-npm run preview # ビルド結果をローカルでプレビュー
-npm run lint    # oxlintによるlint
+pnpm install    # 依存パッケージのインストール（Electron 本体のダウンロードも含む）
+pnpm dev     # 開発サーバー起動（Vite、ブラウザで http://localhost:5173 を開く）
+pnpm build   # 型チェック(tsc -b) + 本番ビルド → dist/
+pnpm preview # ビルド結果をローカルでプレビュー
+pnpm lint    # oxlintによるlint
 ```
 
 ## Electron 版
 
 ```bash
-npm run dev:electron    # electron-vite dev: レンダラーを HMR 付きで起動し、Electron ウィンドウを開く
-npm run build:electron  # 型チェック(tsc -b) + electron-vite build → out/{main,preload,renderer}/
-npm run start:electron  # electron-vite preview: ビルドしてから Electron で起動（本番相当の動作確認）
-npm run package         # build:electron のあと electron-builder でインストーラを作成 → release/
+pnpm dev:electron    # electron-vite dev: レンダラーを HMR 付きで起動し、Electron ウィンドウを開く
+pnpm build:electron  # 型チェック(tsc -b) + electron-vite build → out/{main,preload,renderer}/
+pnpm start:electron  # electron-vite preview: ビルドしてから Electron で起動（本番相当の動作確認）
+pnpm package         # build:electron のあと electron-builder でインストーラを作成 → release/
 ```
 
-- `npm run build:electron` 後に `npx electron .` でもビルド済みのアプリを起動できる。
-- デバッグ用に `npx electron . --remote-debugging-port=9333` のように起動すると、Chrome DevTools Protocol でレンダラーに接続できる。
-- 保存先ディレクトリを変えたいときは環境変数 `MINDMAP_DATA_DIR` を設定して起動する（例: `$env:MINDMAP_DATA_DIR = "C:\tmp\mindmap-test"; npx electron .`）。
-- `npm run package` はプラットフォームごとのツールをダウンロードするため、初回は時間がかかる。Windows では管理者権限またはシンボリックリンク作成権限が必要になる場合がある。
+- `pnpm build:electron` 後に `pnpm exec electron .` でもビルド済みのアプリを起動できる。
+- デバッグ用に `pnpm exec electron . --remote-debugging-port=9333` のように起動すると、Chrome DevTools Protocol でレンダラーに接続できる。
+- 保存先ディレクトリを変えたいときは環境変数 `MINDMAP_DATA_DIR` を設定して起動する（例: `$env:MINDMAP_DATA_DIR = "C:\tmp\mindmap-test"; pnpm exec electron .`）。
+- `pnpm package` はプラットフォームごとのツールをダウンロードするため、初回は時間がかかる。Windows では管理者権限またはシンボリックリンク作成権限が必要になる場合がある。
 
 ## リリース（GitHub Releases）
 
@@ -46,16 +46,16 @@ git push origin v0.1.0
 ## 型チェックだけ行う
 
 ```bash
-npx tsc -b   # tsconfig.app.json / tsconfig.node.json / tsconfig.electron.json をまとめて検査
+pnpm exec tsc -b   # tsconfig.app.json / tsconfig.node.json / tsconfig.electron.json をまとめて検査
 ```
 
 ## 単体テスト（Vitest）
 
 ```bash
-npm test               # vitest をウォッチモードで起動
-npm run test:run       # 全テストを 1 回実行（CI 向け）
-npm run test:coverage  # カバレッジ付きで実行 → coverage/
-npx vitest run src/model   # パスを指定して一部だけ実行
+pnpm test               # vitest をウォッチモードで起動
+pnpm test:run       # 全テストを 1 回実行（CI 向け）
+pnpm test:coverage  # カバレッジ付きで実行 → coverage/
+pnpm exec vitest run src/model   # パスを指定して一部だけ実行
 ```
 
 - テストファイルは対象と同じディレクトリの `対象名.test.ts(x)`。`src/**` と `electron/**` が対象。
@@ -64,4 +64,4 @@ npx vitest run src/model   # パスを指定して一部だけ実行
 
 ## 変更前後の確認
 
-コードを変更したら `npm run lint` → `npx tsc -b` → `npm run test:run` → 必要に応じて `npm run build` / `npm run build:electron` の順で確認する。
+コードを変更したら `pnpm lint` → `pnpm exec tsc -b` → `pnpm test:run` → 必要に応じて `pnpm build` / `pnpm build:electron` の順で確認する。
