@@ -312,3 +312,22 @@ export function removeTableColumn(map: MindMap, id: NodeId, index: number): Mind
     table.map((cells) => cells.filter((_, c) => c !== index)),
   )
 }
+
+/**
+ * id の祖先のうち折りたたまれているものをすべて展開し、id が表示されるようにする。
+ * 展開する祖先が無ければ同じ参照を返す
+ */
+export function expandAncestors(map: MindMap, id: NodeId): MindMap {
+  let nodes: Record<NodeId, MindMapNode> | null = null
+  let current = map.nodes[id]?.parentId ?? null
+  while (current !== null) {
+    const ancestor = map.nodes[current]
+    if (!ancestor) break
+    if (ancestor.collapsed) {
+      nodes ??= { ...map.nodes }
+      nodes[current] = { ...ancestor, collapsed: false }
+    }
+    current = ancestor.parentId
+  }
+  return nodes ? { ...map, nodes } : map
+}

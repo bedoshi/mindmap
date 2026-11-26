@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
 import { splitLines, type NodeLayout } from '../model/layout'
 import type { MindMapNode } from '../model/types'
+import { HighlightedText } from './HighlightedText'
 import { TableContent, type CellDraft } from './TableContent'
 
 interface Props {
@@ -14,6 +15,10 @@ interface Props {
   dragging: boolean
   dropTarget: boolean
   hiddenCount: number
+  /** 検索中の検索語（一致部分をハイライトする）。検索していなければ null */
+  searchQuery: string | null
+  /** 表示中の検索結果のノードか */
+  searchCurrent: boolean
   onDraftChange: (text: string) => void
   onCommit: () => void
   onCancel: () => void
@@ -37,6 +42,8 @@ export function NodeView({
   dragging,
   dropTarget,
   hiddenCount,
+  searchQuery,
+  searchCurrent,
   onDraftChange,
   onCommit,
   onCancel,
@@ -82,6 +89,7 @@ export function NodeView({
   if (dropTarget) classes.push('drop-target')
   if (node.collapsed) classes.push('collapsed')
   if (node.table) classes.push('table-node')
+  if (searchCurrent) classes.push('search-current')
 
   const style = {
     left: layout.x,
@@ -99,6 +107,7 @@ export function NodeView({
           table={node.table}
           layout={layout.table}
           cellEdit={cellEdit}
+          searchQuery={searchQuery}
           onDraftChange={onCellDraftChange}
           onCommit={onCellCommit}
           onCancel={onCellCancel}
@@ -121,7 +130,7 @@ export function NodeView({
           className={node.text ? 'node-text' : 'node-text placeholder'}
           style={{ lineHeight: `${layout.lineHeight}px` }}
         >
-          {node.text || '（空）'}
+          {node.text ? <HighlightedText text={node.text} query={searchQuery} /> : '（空）'}
         </span>
       )}
       {node.children.length > 0 && layout.side !== 'center' && (

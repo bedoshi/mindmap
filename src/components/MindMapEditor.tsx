@@ -15,6 +15,7 @@ import { useMindMap } from '../hooks/useMindMap'
 import { computeLayout } from '../model/layout'
 import {
   countSubtree,
+  expandAncestors,
   isDescendant,
   moveRoot,
   newId,
@@ -23,11 +24,13 @@ import {
   updateText,
   visibleChildren,
 } from '../model/mindmap'
+import { findMatches, isSearchable } from '../model/search'
 import type { MindMap, NodeId } from '../model/types'
 import { XML_FILE_EXTENSION, mindMapToXml, titleOf, xmlToMindMap } from '../storage/xml'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { MapListPanel } from './MapListPanel'
 import { NodeView } from './NodeView'
+import { SearchBar } from './SearchBar'
 import { Toolbar } from './Toolbar'
 
 interface Props {
@@ -65,6 +68,15 @@ interface CellEditState {
 type ContextMenuState =
   | { kind: 'node'; x: number; y: number; id: NodeId; cell: { row: number; column: number } | null }
   | { kind: 'canvas'; x: number; y: number; mapX: number; mapY: number }
+
+/** マップ内検索の状態。検索していないときは null */
+interface SearchState {
+  query: string
+  /** 表示中の検索結果の位置（0 始まり） */
+  index: number
+  /** Ctrl+F を押すたびに増やし、検索欄にフォーカスし直す合図にする */
+  focusKey: number
+}
 
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; viewX: number; viewY: number }
@@ -140,6 +152,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const [mapListOpen, setMapListOpen] = useState(false)
   const [cellEdit, setCellEdit] = useState<CellEditState | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [search, setSearch] = useState<SearchState | null>(null)
 
   // 選択中のノードが（Undo や新規作成で）消えた場合はルートを選択扱いにする。
   // 編集中のノードが消えた場合は編集を終了したものとして扱う。
@@ -167,6 +180,63 @@ export function MindMapEditor({ initialMap, library }: Props) {
     if (rootMove) displayMap = moveRoot(displayMap, rootMove.id, rootMove.x, rootMove.y)
     return computeLayout(displayMap)
   }, [map, editing, editingCell, rootMove])
+
+  // ---- 検索 ----
+
+  const searchQuery = search !== null && isSearchable(search.query) ? search.query : null
+  const searchMatches = useMemo(
+    () => (searchQuery === null ? [] : findMatches(map, searchQuery)),
+    [map, searchQuery],
+  )
+  // 編集や Undo で件数が減った場合に範囲外を指さないよう丸める
+  const searchIndex =
+    search === null || searchMatches.length === 0
+      ? 0
+      : Math.min(search.index, searchMatches.length - 1)
+  const currentMatch = searchMatches[searchIndex] ?? null
+
+  /**
+   * 検索結果のノードを選択し、折りたたみで隠れていれば祖先を展開して、画面の中央に表示する。
+   * 展開後の位置は、展開したマップのレイアウトをその場で計算して求める
+   */
+  const revealMatch = useCallback(
+    (id: NodeId) => {
+      setSelectedId(id)
+      store.expandAncestors(id)
+      const target = computeLayout(expandAncestors(map, id)).nodes[id]
+      const el = containerRef.current
+      if (!target || !el) return
+      setView((v) => ({
+        ...v,
+        x: el.clientWidth / 2 - (target.x + target.width / 2) * v.zoom,
+        y: el.clientHeight / 2 - (target.y + target.height / 2) * v.zoom,
+      }))
+    },
+    [map, store],
+  )
+
+  const openSearch = useCallback(() => {
+    setContextMenu(null)
+    setMapListOpen(false)
+    setSearch((s) => ({ query: s?.query ?? '', index: s?.index ?? 0, focusKey: (s?.focusKey ?? 0) + 1 }))
+  }, [])
+
+  const closeSearch = useCallback(() => setSearch(null), [])
+
+  /** 検索語を変えたら先頭の検索結果にジャンプする */
+  const changeSearchQuery = (query: string) => {
+    setSearch((s) => (s ? { ...s, query, index: 0 } : s))
+    const first = isSearchable(query) ? findMatches(map, query)[0] : undefined
+    if (first) revealMatch(first)
+  }
+
+  /** 次（step = 1）/ 前（step = -1）の検索結果へ。端に来たら反対の端に戻る */
+  const moveSearch = (step: 1 | -1) => {
+    if (!search || searchMatches.length === 0) return
+    const index = (searchIndex + step + searchMatches.length) % searchMatches.length
+    setSearch({ ...search, index })
+    revealMatch(searchMatches[index])
+  }
 
   // 初期表示でメインのルートを画面中央に置く
   useLayoutEffect(() => {
@@ -508,7 +578,14 @@ export function MindMapEditor({ initialMap, library }: Props) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (editing || editingCell || menu || e.isComposing) return
+      if (e.isComposing) return
+      // Ctrl+F は編集中や入力欄の中でも検索を開く（ブラウザ標準の検索の代わり）
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        openSearch()
+        return
+      }
+      if (editing || editingCell || menu) return
       if (
         e.target instanceof Element &&
         e.target.closest('input, textarea, select, [contenteditable="true"]')
@@ -551,7 +628,9 @@ export function MindMapEditor({ initialMap, library }: Props) {
       if (mod || e.altKey) return
 
       if (e.key === 'Escape') {
-        setSelectedId(null)
+        // 検索中は検索を終える（選択はそのまま）。検索していなければ選択を解除する
+        if (search) setSearch(null)
+        else setSelectedId(null)
         return
       }
       if (selected === null) return
@@ -601,6 +680,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
     editing,
     editingCell,
     menu,
+    search,
+    openSearch,
     selected,
     store,
     addChild,
@@ -669,6 +750,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
       }
       lastTapRef.current = { id: null, time: now, x: e.clientX, y: e.clientY }
       setSelectedId(null)
+      // 余白のクリックで検索を終える
+      setSearch(null)
       dragRef.current = {
         kind: 'pan',
         startX: e.clientX,
@@ -893,6 +976,18 @@ export function MindMapEditor({ initialMap, library }: Props) {
           e.target.value = ''
         }}
       />
+      {search && (
+        <SearchBar
+          query={search.query}
+          matchCount={searchMatches.length}
+          currentIndex={searchIndex}
+          focusKey={search.focusKey}
+          onQueryChange={changeSearchQuery}
+          onNext={() => moveSearch(1)}
+          onPrevious={() => moveSearch(-1)}
+          onClose={closeSearch}
+        />
+      )}
       <MapListPanel
         open={mapListOpen}
         maps={library.maps}
@@ -943,6 +1038,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
                 dragging={nodeDrag?.id === node.id}
                 dropTarget={nodeDrag?.targetId === node.id}
                 hiddenCount={countSubtree(map, node.id) - 1}
+                searchQuery={searchQuery}
+                searchCurrent={currentMatch === node.id}
                 onDraftChange={(text) =>
                   setEdit((current) => (current?.id === node.id ? { ...current, draft: text } : current))
                 }
@@ -974,7 +1071,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
       )}
       <div className="help">
         Tab: 子を追加 / Enter: 兄弟を追加 / Delete: 削除 / F2・ダブルクリック: 編集 / 矢印キー: 移動 /
-        ドラッグ: 付け替え・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存 / 右クリック: メニュー（テーブルの追加・行と列の編集）
+        ドラッグ: 付け替え・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存 / Ctrl+F: 検索 / 右クリック: メニュー（テーブルの追加・行と列の編集）
       </div>
       {(message ?? errorMessage) && <div className="message">{message ?? errorMessage}</div>}
     </div>

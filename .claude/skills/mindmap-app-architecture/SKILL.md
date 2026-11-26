@@ -41,6 +41,7 @@ src/
     types.ts               MindMap / MindMapNode などのデータ型
     mindmap.ts             ツリー操作の純粋関数（追加・削除・移動・折りたたみなど）
     layout.ts              自動レイアウト計算（座標・接続線のパス・枝の色）
+    search.ts              マップ内検索（一致するノードの列挙、ハイライト用のテキスト分割）
   storage/
     types.ts               MapStorage / MapSummary（保存先の抽象インターフェース）
     xml.ts                 MindMap ⇔ XML の相互変換、タイトル取得
@@ -62,6 +63,8 @@ src/
     ContextMenu.tsx        右クリックメニュー（表示専用。項目と処理は MindMapEditor が渡す）
     Toolbar.tsx            ツールバー（表示専用。状態は MindMapEditor が持つ）
     MapListPanel.tsx       マップ一覧パネル（表示専用）
+    SearchBar.tsx          マップ内検索のポップアップ（表示専用。検索の状態は MindMapEditor が持つ）
+    HighlightedText.tsx    テキストの検索語に一致する部分を mark で囲んで表示する
 ```
 
 ## データモデル（`src/model/types.ts`）
@@ -142,6 +145,9 @@ src/
 - ホイールイベントは `preventDefault` が必要なため React の `onWheel` ではなく `addEventListener('wheel', ..., { passive: false })` で登録している。
 - キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）・セル編集中・右クリックメニュー表示中は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。
 - 右クリックは `.canvas` の `onContextMenu` で受け、`[data-node-id]` と `[data-row]`（セル）から対象を決めて `ContextMenu` を `position: fixed` で開く。ノードが無ければ余白のメニュー（`ContextMenuState` の `kind: 'canvas'`）として、右クリック位置をマップ座標に変換して持つ。メニューは window の pointerdown（キャプチャ）・Esc・resize で閉じる。
+- マップ内検索は `MindMapEditor` のローカル state（`SearchState`: 検索語・現在の位置・フォーカス用のキー）で持ち、履歴には含めない。一致するノードは `search.ts` の `findMatches` で毎回（`useMemo`）求め、`NodeView` / `TableContent` に検索語を渡して `HighlightedText` で一致部分を `mark.search-hit` にする。`mark` には padding を付けない（レイアウト計算上の幅とずれるため）。
+- 検索結果へのジャンプ（`revealMatch`）は、選択・祖先の展開（`expandAncestors`、履歴に積む）・スクロールを同時に行う。スクロール先は、展開後のマップの `computeLayout` をその場で計算して求める（展開後のレイアウトを effect で待つと、effect 内の setState になり lint の `set-state-in-effect` に当たるため）。
+- `Ctrl+F` はキーボード処理の先頭で扱い、編集中や入力欄の中でも検索を開く。`Esc` は検索中なら検索を終え、そうでなければ選択を解除する。余白の pointerdown でも検索を終える。
 - テーブルのセル編集は `EditState` とは別の `CellEditState`（ノード ID・行・列・ドラフト）で持つ。セルのダブルクリックは既存のダブルクリック判定の中で `[data-row]` を見てセル編集に振り分ける。`Tab` で次のセルへ移ったあとに古い input の blur が届いても誤って確定しないよう、確定（`commitCellEdit`）はセル位置を照合してから行う。
 
 ## テスト

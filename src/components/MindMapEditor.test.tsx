@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { MapLibrary } from '../hooks/useMapLibrary'
-import { addChild, addTableChild, createMindMap } from '../model/mindmap'
+import { addChild, addTableChild, createMindMap, toggleCollapse } from '../model/mindmap'
 import type { MindMap } from '../model/types'
 import { titleOf } from '../storage/xml'
 import { MindMapEditor } from './MindMapEditor'
@@ -427,6 +427,141 @@ describe('MindMapEditor', () => {
       await user.click(screen.getByRole('menuitem', { name: 'テーブルを削除' }))
 
       expect(screen.queryByText('A')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('マップ内検索', () => {
+    const searchMap = () => {
+      let map = createMindMap('計画')
+      map = addChild(map, map.rootId, 'a', '設計の計画')
+      map = addChild(map, 'a', 'a1', '詳細計画')
+      map = addChild(map, map.rootId, 'b', '実装')
+      return toggleCollapse(map, 'a')
+    }
+    const hits = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('mark.search-hit')).map((m) => m.textContent)
+    const selectedText = (container: HTMLElement) =>
+      container.querySelector('.node.selected')?.textContent
+
+    it('Ctrl+F で検索欄が開き、一致した部分が黄色のハイライト（mark）になって最初の結果が選択される', async () => {
+      const user = userEvent.setup()
+      const { container } = renderEditor(searchMap())
+
+      await user.keyboard('{Control>}f{/Control}')
+      const input = screen.getByRole('textbox', { name: 'マップ内を検索' })
+      expect(input).toHaveFocus()
+      await user.type(input, '計画')
+
+      expect(screen.getByText('1 / 3')).toBeInTheDocument()
+      expect(hits(container)).toEqual(['計画', '計画'])
+      expect(selectedText(container)).toBe('計画')
+    })
+
+    it('Enter・↓ で次、Shift+Enter・↑ で前の結果へ移り、端では反対の端に戻る', async () => {
+      const user = userEvent.setup()
+      const { container } = renderEditor(searchMap())
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '計画')
+
+      await user.keyboard('{Enter}')
+      expect(screen.getByText('2 / 3')).toBeInTheDocument()
+      expect(selectedText(container)).toContain('設計の計画')
+
+      await user.click(screen.getByRole('button', { name: '次の検索結果' }))
+      expect(screen.getByText('3 / 3')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '次の検索結果' }))
+      expect(screen.getByText('1 / 3')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('textbox', { name: 'マップ内を検索' }))
+      await user.keyboard('{Shift>}{Enter}{/Shift}')
+      expect(screen.getByText('3 / 3')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '前の検索結果' }))
+      expect(screen.getByText('2 / 3')).toBeInTheDocument()
+    })
+
+    it('折りたたまれたノードが検索結果になると、祖先を展開して表示する', async () => {
+      const user = userEvent.setup()
+      const { container, library } = renderEditor(searchMap())
+      expect(screen.queryByText('詳細計画')).not.toBeInTheDocument()
+
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '詳細')
+
+      expect(selectedText(container)).toBe('詳細計画')
+      expect(hits(container)).toEqual(['詳細'])
+      expect(vi.mocked(library.reportChange).mock.lastCall?.[0].nodes['a'].collapsed).toBe(false)
+    })
+
+    it('テーブルのセルの一致部分もハイライトする', async () => {
+      const user = userEvent.setup()
+      const base = createMindMap('中心')
+      const { container } = renderEditor(addTableChild(base, base.rootId, 't', [['予算計画', 'x']]))
+
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '計画')
+
+      expect(screen.getByText('1 / 1')).toBeInTheDocument()
+      expect(hits(container)).toEqual(['計画'])
+    })
+
+    it('一致が無いときは 0 件と表示し、前後のボタンは押せない', async () => {
+      const user = userEvent.setup()
+      renderEditor(searchMap())
+
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '存在しない')
+
+      expect(screen.getByText('0 件')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '次の検索結果' })).toBeDisabled()
+    })
+
+    it('Esc で検索を終え、検索欄とハイライトが消える', async () => {
+      const user = userEvent.setup()
+      const { container } = renderEditor(searchMap())
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '計画')
+
+      await user.keyboard('{Escape}')
+
+      expect(screen.queryByRole('search')).not.toBeInTheDocument()
+      expect(hits(container)).toEqual([])
+    })
+
+    it('検索欄の外（ノードの選択後など）で Esc を押しても検索を終える', async () => {
+      const user = userEvent.setup()
+      renderEditor(searchMap())
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '実装')
+      await user.click(screen.getByText('実装'))
+
+      await user.keyboard('{Escape}')
+
+      expect(screen.queryByRole('search')).not.toBeInTheDocument()
+    })
+
+    it('マップの何も無い所をクリックすると検索を終える。ノードのクリックでは終えない', async () => {
+      const user = userEvent.setup()
+      const { container } = renderEditor(searchMap())
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '計画')
+
+      await user.click(screen.getByText('実装'))
+      expect(screen.getByRole('search')).toBeInTheDocument()
+
+      await user.click(container.querySelector('.canvas')!)
+      expect(screen.queryByRole('search')).not.toBeInTheDocument()
+    })
+
+    it('検索欄を閉じても検索語は残らず、もう一度 Ctrl+F で空の検索欄が開く', async () => {
+      const user = userEvent.setup()
+      renderEditor(searchMap())
+      await user.keyboard('{Control>}f{/Control}')
+      await user.type(screen.getByRole('textbox', { name: 'マップ内を検索' }), '計画')
+      await user.click(screen.getByRole('button', { name: '検索を閉じる' }))
+
+      await user.keyboard('{Control>}f{/Control}')
+
+      expect(screen.getByRole('textbox', { name: 'マップ内を検索' })).toHaveValue('')
     })
   })
 })
