@@ -138,7 +138,12 @@ export function xmlToMindMap(xml: string): MindMap {
   if (!rootElement) throw new Error('ルートノードが見つかりません')
 
   const nodes: Record<NodeId, MindMapNode> = {}
-  const visit = (element: Element, parentId: NodeId | null, isRootChild: boolean): NodeId => {
+  const visit = (
+    element: Element,
+    parentId: NodeId | null,
+    isRootChild: boolean,
+    isMainRoot = false,
+  ): NodeId => {
     let id = element.getAttribute('id') ?? ''
     // ID が無い・重複している場合は振り直す（手編集されたファイルへの耐性）
     if (!id || nodes[id]) id = newId()
@@ -158,8 +163,8 @@ export function xmlToMindMap(xml: string): MindMap {
       if (x) node.x = x // 0（省略時と同じ）は持たない
       if (y) node.y = y
     }
-    if (parentId !== null) {
-      // テーブルノードになれるのはルート以外のノードのみ
+    if (!isMainRoot) {
+      // テーブルノードになれるのはメインのルート以外（子孫とフローティングノード）
       const table = parseTable(element)
       if (table) {
         node.table = table
@@ -172,7 +177,7 @@ export function xmlToMindMap(xml: string): MindMap {
     }
     return id
   }
-  const rootId = visit(rootElement, null, false)
+  const rootId = visit(rootElement, null, false, true)
   const floatingRootIds = floatingElements.map((element) => visit(element, null, false))
   return { rootId, floatingRootIds, nodes }
 }

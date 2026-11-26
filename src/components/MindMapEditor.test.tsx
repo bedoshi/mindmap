@@ -306,6 +306,63 @@ describe('MindMapEditor', () => {
       expect(library.reportChange).not.toHaveBeenCalled()
     })
 
+    it('余白を右クリックするとフローティングノード・テーブルの追加メニューが開き、ノードの操作は出ない', async () => {
+      const user = userEvent.setup()
+      const { container } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+
+      const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
+      expect(items).toEqual(['フローティングノードを追加', 'テーブルを追加'])
+    })
+
+    it('余白の右クリックメニューの「テーブルを追加」で、テーブルのフローティングノードを作って先頭のセルを編集できる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを追加' }))
+      await user.type(screen.getByRole('textbox', { name: 'セル 1 行 1 列' }), '浮遊表{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(reported?.floatingRootIds).toHaveLength(1)
+      const floating = reported!.nodes[reported!.floatingRootIds[0]]
+      expect(floating).toMatchObject({ text: '', parentId: null })
+      expect(floating.table).toEqual([
+        ['浮遊表', ''],
+        ['', ''],
+      ])
+      expect(typeof floating.x).toBe('number')
+    })
+
+    it('余白の右クリックメニューの「フローティングノードを追加」で、テキストのフローティングノードを作れる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+      await user.click(screen.getByRole('menuitem', { name: 'フローティングノードを追加' }))
+      await user.type(screen.getByRole('textbox'), '浮遊{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      const floating = reported!.nodes[reported!.floatingRootIds[0]]
+      expect(floating).toMatchObject({ text: '浮遊', parentId: null })
+      expect(floating.table).toBeUndefined()
+    })
+
+    it('テーブルのフローティングノードはメニューから削除できる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを追加' }))
+      await user.type(screen.getByRole('textbox', { name: 'セル 1 行 1 列' }), '消す{Enter}')
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消す') })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを削除' }))
+
+      expect(screen.queryByText('消す')).not.toBeInTheDocument()
+      expect(vi.mocked(library.reportChange).mock.lastCall?.[0].floatingRootIds).toEqual([])
+    })
+
     it('メニューの「テーブルを削除」でテーブルノードを削除できる', async () => {
       const user = userEvent.setup()
       renderEditor(tableMap())

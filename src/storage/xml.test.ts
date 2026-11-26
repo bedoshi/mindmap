@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addChild,
   addFloatingRoot,
+  addFloatingTable,
   addTableChild,
   createMindMap,
   moveRoot,
@@ -219,7 +220,16 @@ describe('テーブルノードの XML', () => {
     expect(map.nodes['e'].text).toBe('空')
   })
 
-  it('ルートの table は無視する（テーブルノードになれるのはルート以外）', () => {
+  it('テーブルのフローティングノードも書き出し・読み込みで元に戻る', () => {
+    const map = addFloatingTable(createMindMap('中心'), 'f', 400, 300, [['x', 'y']])
+
+    const loaded = xmlToMindMap(mindMapToXml(map))
+
+    expect(loaded.floatingRootIds).toEqual(['f'])
+    expect(loaded.nodes['f']).toMatchObject({ text: '', x: 400, y: 300, table: [['x', 'y']] })
+  })
+
+  it('メインのルートの table は無視する（テーブルノードになれるのはメインのルート以外）', () => {
     const map = xmlToMindMap(
       '<mindmap version="1"><node id="r" text="中心"><table><row><cell>a</cell></row></table></node></mindmap>',
     )

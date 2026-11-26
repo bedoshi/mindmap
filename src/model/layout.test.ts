@@ -12,6 +12,7 @@ import {
 import {
   addChild,
   addFloatingRoot,
+  addFloatingTable,
   addTableChild,
   createMindMap,
   moveRoot,
@@ -207,5 +208,17 @@ describe('テーブルノードのレイアウト', () => {
     expect(layout.nodes['t'].table?.columnWidths).toHaveLength(2)
     expect(layout.nodes['t'].height).toBe(TABLE_ROW_HEIGHT + TABLE_BORDER * 2)
     expect(layout.nodes['n'].table).toBeUndefined()
+  })
+
+  it('テーブルのフローティングノードは、指定した中心座標にテーブルの大きさで配置する', () => {
+    const map = addFloatingTable(createMindMap('中心'), 'f', 300, 200, [['a'], ['b'], ['c']])
+
+    const f = computeLayout(map).nodes['f']
+
+    expect(f.table?.columnWidths).toHaveLength(1)
+    expect(f.height).toBe(TABLE_ROW_HEIGHT * 3 + TABLE_BORDER * 2)
+    expect(f.x + f.width / 2).toBeCloseTo(300)
+    expect(f.y + f.height / 2).toBeCloseTo(200)
+    expect(f).toMatchObject({ side: 'center', depth: 0 })
   })
 })

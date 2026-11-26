@@ -152,7 +152,9 @@ export function computeLayout(map: MindMap): Layout {
 
   const prepare = (id: NodeId, isRoot: boolean): number => {
     const node = map.nodes[id]
-    const size = node.table && !isRoot ? measureTable(node.table) : measureNode(node.text, isRoot)
+    // メインのルートはテーブルを持たない（持っていても無視する）。フローティングノードは持てる
+    const size =
+      node.table && id !== map.rootId ? measureTable(node.table) : measureNode(node.text, isRoot)
     sizes[id] = size
     let total = 0
     visibleChildren(map, id).forEach((childId, i) => {
@@ -221,6 +223,7 @@ export function computeLayout(map: MindMap): Layout {
       depth: 0,
       font: rootSize.font,
     }
+    if (rootSize.table) nodes[rootId].table = rootSize.table
 
     const rootChildren = visibleChildren(map, rootId)
     const groups: Record<Side, NodeId[]> = { right: [], left: [] }

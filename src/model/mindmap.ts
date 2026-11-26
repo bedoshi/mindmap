@@ -234,6 +234,19 @@ export function addTableChild(
   return { ...added, nodes: { ...added.nodes, [id]: { ...added.nodes[id], table } } }
 }
 
+/** (x, y) を中心とする位置に、空のテーブルを持つフローティングノードを追加する */
+export function addFloatingTable(
+  map: MindMap,
+  id: NodeId,
+  x: number,
+  y: number,
+  table: string[][] = createTable(),
+): MindMap {
+  const added = addFloatingRoot(map, id, x, y, '')
+  if (added === map) return map
+  return { ...added, nodes: { ...added.nodes, [id]: { ...added.nodes[id], table } } }
+}
+
 function withTable(map: MindMap, id: NodeId, table: string[][]): MindMap {
   return { ...map, nodes: { ...map.nodes, [id]: { ...map.nodes[id], table } } }
 }

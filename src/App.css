@@ -192,6 +192,15 @@
   overflow: hidden;
 }
 
+.node.table-node.depth-0 {
+  border-color: var(--root-table-color);
+}
+
+.node.table-node.depth-0 .table-cell {
+  border-right-color: color-mix(in srgb, var(--root-table-color) 45%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--root-table-color) 45%, transparent);
+}
+
 .table-cell.last-column {
   border-right: none;
 }

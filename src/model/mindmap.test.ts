@@ -4,6 +4,7 @@ import {
   addFloatingRoot,
   allRootIds,
   addSibling,
+  addFloatingTable,
   addTableChild,
   collectSubtree,
   countSubtree,
@@ -369,6 +370,16 @@ describe('テーブルノード', () => {
     expect(map.nodes['t']).toMatchObject({ text: '', parentId: base.rootId, table: createTable() })
     expect(map.nodes[base.rootId].children).toEqual(['t'])
     expect(addTableChild(map, 'missing', 'x')).toBe(map)
+  })
+
+  it('addFloatingTable は指定した中心座標に、テーブルを持つフローティングノードを追加する', () => {
+    const base = createMindMap('中心')
+
+    const map = addFloatingTable(base, 'f', 120, -40)
+
+    expect(map.floatingRootIds).toEqual(['f'])
+    expect(map.nodes['f']).toMatchObject({ text: '', parentId: null, x: 120, y: -40, table: createTable() })
+    expect(addFloatingTable(map, 'f', 0, 0)).toBe(map)
   })
 
   it('updateTableCell はセルの文字列を変える。範囲外・同じ値なら同じ参照を返す', () => {

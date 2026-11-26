@@ -71,7 +71,7 @@ src/
 - `MindMapNode.x / y` は根のノードにのみ意味を持つ中心のマップ座標（省略時 0）。子孫の位置は自動レイアウトの結果で、データには持たない。
 - `MindMapNode.side`（`left` | `right`）は根（メイン・フローティング）の直下のノードにのみ付与し、ルートのどちら側に出すかを表す。それ以外のノードは親と同じ側に配置されるため持たない。
 - ノードID・マップIDは `crypto.randomUUID()` で生成する。
-- `MindMapNode.table`（`string[][]`、`rows[行][列]`）があるノードはテーブルノード。`text` は空文字で使わない。全行が同じ列数で 1 行 1 列以上という不変条件は `mindmap.ts` のテーブル操作関数（`addTableChild` / `updateTableCell` / `insertTableRow` / `removeTableRow` / `insertTableColumn` / `removeTableColumn`）と XML の読み込みで守る。ルートはテーブルノードにしない。
+- `MindMapNode.table`（`string[][]`、`rows[行][列]`）があるノードはテーブルノード。`text` は空文字で使わない。全行が同じ列数で 1 行 1 列以上という不変条件は `mindmap.ts` のテーブル操作関数（`addTableChild` / `addFloatingTable` / `updateTableCell` / `insertTableRow` / `removeTableRow` / `insertTableColumn` / `removeTableColumn`）と XML の読み込みで守る。メインのルートはテーブルノードにしない（フローティングノードはなれる。`computeLayout` も XML の読み込みもメインのルートの `table` だけを無視する）。
 
 ## 状態管理
 
@@ -139,7 +139,7 @@ src/
 - ドロップ先の判定は `document.elementFromPoint` で `[data-node-id]` を探す。ゴースト要素は `pointer-events: none`。
 - ホイールイベントは `preventDefault` が必要なため React の `onWheel` ではなく `addEventListener('wheel', ..., { passive: false })` で登録している。
 - キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）・セル編集中・右クリックメニュー表示中は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。
-- 右クリックは `.canvas` の `onContextMenu` で受け、`[data-node-id]` と `[data-row]`（セル）から対象を決めて `ContextMenu` を `position: fixed` で開く。メニューは window の pointerdown（キャプチャ）・Esc・resize で閉じる。
+- 右クリックは `.canvas` の `onContextMenu` で受け、`[data-node-id]` と `[data-row]`（セル）から対象を決めて `ContextMenu` を `position: fixed` で開く。ノードが無ければ余白のメニュー（`ContextMenuState` の `kind: 'canvas'`）として、右クリック位置をマップ座標に変換して持つ。メニューは window の pointerdown（キャプチャ）・Esc・resize で閉じる。
 - テーブルのセル編集は `EditState` とは別の `CellEditState`（ノード ID・行・列・ドラフト）で持つ。セルのダブルクリックは既存のダブルクリック判定の中で `[data-row]` を見てセル編集に振り分ける。`Tab` で次のセルへ移ったあとに古い input の blur が届いても誤って確定しないよう、確定（`commitCellEdit`）はセル位置を照合してから行う。
 
 ## テスト

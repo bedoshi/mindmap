@@ -57,13 +57,14 @@ interface CellEditState {
   draft: string
 }
 
-/** 右クリックメニューの対象。cell はテーブルノードのセル上で開いたときの位置 */
-interface ContextMenuState {
-  x: number
-  y: number
-  id: NodeId
-  cell: { row: number; column: number } | null
-}
+/**
+ * 右クリックメニューの対象。x / y はメニューの表示位置（ウィンドウ座標）。
+ * ノード上なら kind: 'node'（cell はテーブルノードのセル上で開いたときの位置）、
+ * 余白なら kind: 'canvas'（mapX / mapY は右クリックした位置のマップ座標）
+ */
+type ContextMenuState =
+  | { kind: 'node'; x: number; y: number; id: NodeId; cell: { row: number; column: number } | null }
+  | { kind: 'canvas'; x: number; y: number; mapX: number; mapY: number }
 
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; viewX: number; viewY: number }
@@ -150,7 +151,10 @@ export function MindMapEditor({ initialMap, library }: Props) {
     cellEdit !== null && map.nodes[cellEdit.id]?.table?.[cellEdit.row]?.[cellEdit.column] !== undefined
       ? cellEdit
       : null
-  const menu = contextMenu !== null && map.nodes[contextMenu.id] ? contextMenu : null
+  const menu =
+    contextMenu !== null && (contextMenu.kind === 'canvas' || map.nodes[contextMenu.id])
+      ? contextMenu
+      : null
 
   // 編集中は入力中のテキストでレイアウトを計算し、幅が追従するようにする
   // ルートの移動中は仮の座標で計算し、ドロップ時に初めて履歴へ積む
@@ -318,6 +322,18 @@ export function MindMapEditor({ initialMap, library }: Props) {
       store.addFloating(id, Math.round(x), Math.round(y))
       setSelectedId(id)
       setEdit({ id, draft: '', selectAll: false })
+    },
+    [store],
+  )
+
+  /** (x, y) を中心とするテーブルのフローティングノードを作り、先頭のセルを編集状態にする */
+  const addFloatingTable = useCallback(
+    (x: number, y: number) => {
+      const id = newId()
+      store.addFloatingTable(id, Math.round(x), Math.round(y))
+      setSelectedId(id)
+      setEdit(null)
+      setCellEdit({ id, row: 0, column: 0, draft: '' })
     },
     [store],
   )
@@ -724,15 +740,28 @@ export function MindMapEditor({ initialMap, library }: Props) {
     else startEdit(id)
   }
 
-  /** ノード上の右クリックでメニューを開く。入力欄の上ではブラウザ標準のメニューを使う */
+  /**
+   * 右クリックでメニューを開く。ノード上ならノードのメニュー、余白ならその位置に作るメニュー。
+   * 入力欄の上ではブラウザ標準のメニューを使う
+   */
   const handleContextMenu = (e: ReactMouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
-    if (target.closest('input, .toolbar')) return
-    const id = target.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
-    if (!id || !map.nodes[id]) return
+    if (target.closest('input, button, .toolbar')) return
     e.preventDefault()
-    setSelectedId(id)
-    setContextMenu({ x: e.clientX, y: e.clientY, id, cell: cellAt(target) })
+    const id = target.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
+    if (id && map.nodes[id]) {
+      setSelectedId(id)
+      setContextMenu({ kind: 'node', x: e.clientX, y: e.clientY, id, cell: cellAt(target) })
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    setContextMenu({
+      kind: 'canvas',
+      x: e.clientX,
+      y: e.clientY,
+      mapX: (e.clientX - rect.left - view.x) / view.zoom,
+      mapY: (e.clientY - rect.top - view.y) / view.zoom,
+    })
   }
 
   /** pointerdown の直後に来る mousedown の既定動作（フォーカス移動）を、作成直後の 1 回だけ止める */
@@ -764,6 +793,13 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
   const contextMenuItems = (target: ContextMenuState): ContextMenuItem[] => {
+    if (target.kind === 'canvas') {
+      const { mapX, mapY } = target
+      return [
+        { kind: 'item', label: 'フローティングノードを追加', onSelect: () => addFloating(mapX, mapY) },
+        { kind: 'item', label: 'テーブルを追加', onSelect: () => addFloatingTable(mapX, mapY) },
+      ]
+    }
     const { id } = target
     const node = map.nodes[id]
     const items: ContextMenuItem[] = [
