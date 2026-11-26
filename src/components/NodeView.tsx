@@ -11,8 +11,6 @@ interface Props {
   draft: string | null
   /** 編集開始時にテキスト全体を選択するか */
   selectAllOnFocus: boolean
-  /** Shift+Enter で改行できるか（メインのルートはマップのタイトルなので 1 行に限る） */
-  multiline: boolean
   dragging: boolean
   dropTarget: boolean
   hiddenCount: number
@@ -36,7 +34,6 @@ export function NodeView({
   selected,
   draft,
   selectAllOnFocus,
-  multiline,
   dragging,
   dropTarget,
   hiddenCount,
@@ -65,10 +62,10 @@ export function NodeView({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter') {
-      // Shift+Enter は改行（textarea の既定の動作）。改行できないノードでは何もしない
-      if (e.shiftKey && multiline) return
+      // Shift+Enter は改行（textarea の既定の動作）
+      if (e.shiftKey) return
       e.preventDefault()
-      if (!e.shiftKey) onCommit()
+      onCommit()
     } else if (e.key === 'Escape') {
       e.preventDefault()
       onCancel()

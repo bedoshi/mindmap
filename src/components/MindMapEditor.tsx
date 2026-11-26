@@ -940,7 +940,6 @@ export function MindMapEditor({ initialMap, library }: Props) {
                 selected={selected === node.id}
                 draft={editing?.id === node.id ? editing.draft : null}
                 selectAllOnFocus={editing?.id === node.id ? editing.selectAll : false}
-                multiline={node.id !== map.rootId}
                 dragging={nodeDrag?.id === node.id}
                 dropTarget={nodeDrag?.targetId === node.id}
                 hiddenCount={countSubtree(map, node.id) - 1}

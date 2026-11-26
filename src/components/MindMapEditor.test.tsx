@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MapLibrary } from '../hooks/useMapLibrary'
 import { addChild, addTableChild, createMindMap } from '../model/mindmap'
 import type { MindMap } from '../model/types'
+import { titleOf } from '../storage/xml'
 import { MindMapEditor } from './MindMapEditor'
 
 /** useMapLibrary のテストダブル。保存や一覧操作はすべてモック関数にする */
@@ -222,16 +223,16 @@ describe('MindMapEditor', () => {
       expect(reported!.nodes[reported!.floatingRootIds[0]].text).toBe('上\n下')
     })
 
-    it('メインのルートでは Shift+Enter で改行せず、編集も確定しない', async () => {
+    it('メインのルートでも Shift+Enter で改行でき、マップのタイトルは改行を空白にしたものになる', async () => {
       const user = userEvent.setup()
-      renderEditor()
+      const { library } = renderEditor()
 
       await user.keyboard('{F2}')
-      const input = screen.getByRole('textbox')
-      await user.type(input, '{End}追加{Shift>}{Enter}{/Shift}')
+      await user.type(screen.getByRole('textbox'), '{End}{Shift>}{Enter}{/Shift}2 行目{Enter}')
 
-      expect(input).toHaveValue('中心追加')
-      expect(screen.getByRole('textbox')).toBeInTheDocument()
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(reported!.nodes[reported!.rootId].text).toBe('中心\n2 行目')
+      expect(titleOf(reported!)).toBe('中心 2 行目')
     })
 
     it('テーブルのセルでも Shift+Enter で改行できる', async () => {

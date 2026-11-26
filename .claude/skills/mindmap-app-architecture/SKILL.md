@@ -127,7 +127,7 @@ src/
 - 根の直下は `side` で左右に分け、それぞれ縦に積む。根に子を追加するときの側は `mindmap.ts` の `pickSide(map, rootId)` が部分木のノード数の少ない側を選ぶ。
 - ノード幅は Canvas の `measureText` でテキスト幅を測って決める。フォント指定（`NODE_FONT` / `ROOT_FONT`）を `NodeView` の inline style にも適用して、計測と描画のフォントを一致させている。CSS 側で padding や border を変えるときは `layout.ts` の定数と整合させること（枠線ありのノードは padding を枠線分だけ減らしている）。
 - 複数行のテキストは `splitLines` で行に分け、幅は一番長い行、高さは 1 行のときの高さ + (行数 - 1) × 行の高さ（`NODE_LINE_HEIGHT` / `ROOT_LINE_HEIGHT`）で決める。行の高さは `NodeLayout.lineHeight` として返し、`NodeView` が表示用の span と編集用の textarea に inline style の `line-height` で指定する（`font` の shorthand は line-height を normal に戻すため、ノード要素ではなく子要素に指定する）。表示は `white-space: pre`。
-- 編集欄は textarea。`Enter` は既定の改行を止めて確定し、`Shift+Enter` だけ既定の動作（改行）に任せる。メインのルートは `multiline={false}` で `Shift+Enter` も止める。
+- 編集欄は textarea。`Enter` は既定の改行を止めて確定し、`Shift+Enter` だけ既定の動作（改行）に任せる（メインのルートを含むすべてのノードとセルで同じ）。マップのタイトル（`xml.ts` の `titleOf`）は、ルートのテキストの各行を空白でつないで 1 行にしたもの。
 - 接続線は 3 次ベジェ曲線の SVG パス文字列として返す。枝の色は `BRANCH_COLORS` をルート直下ノードの順序で割り当てる。
 - 編集中はドラフトテキストでレイアウトを計算し、入力に合わせてノード幅が追従するようにしている。セル編集中も同様に、ドラフトを反映した MindMap でレイアウトする。
 - テーブルノードは `measureTable` で大きさを決め、`NodeLayout.table`（`columnWidths` / `rowHeights` / `lineHeight`）にセル配置を返す。列幅はその列の最長セル（複数行なら最長の行）のテキスト幅 + 左右余白（`TABLE_CELL_PAD`）+ 区切り線 1px、行の高さは `TABLE_ROW_HEIGHT` + (その行で最大の行数 - 1) × `NODE_LINE_HEIGHT`、外枠は `TABLE_BORDER`。画面側は CSS grid の `grid-template-columns` / `grid-template-rows` にこの列幅・行の高さをそのまま渡すので、`App.css` の `.table-cell` の padding・区切り線・`.node.table-node` の枠線を変えるときはこれらの定数と合わせること。

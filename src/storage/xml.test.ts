@@ -168,6 +168,10 @@ describe('titleOf', () => {
     expect(titleOf(createMindMap('  計画  '))).toBe('計画')
   })
 
+  it('ルートのテキストが複数行なら、空行を除いた各行を空白でつないで 1 行にする', () => {
+    expect(titleOf(createMindMap(' 2026 年\n\n  計画 \r\n案'))).toBe('2026 年 計画 案')
+  })
+
   it('ルートのテキストが空なら「無題のマップ」を返す', () => {
     expect(titleOf(createMindMap(''))).toBe('無題のマップ')
   })
