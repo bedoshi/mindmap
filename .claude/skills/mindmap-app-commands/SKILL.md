@@ -41,18 +41,18 @@ gh pr list --state open
 
 # バージョンの更新が必要なら release ブランチで PR にする
 git checkout main && git pull --ff-only
-git checkout -b release/v0.4.0
+git checkout -b release/v0.3.1
 # package.json の version を更新してコミット → push → gh pr create
 
 # PR のマージ後、main の CI の成功を確かめてからタグを push する
 git checkout main && git pull --ff-only
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.3.1
+git push origin v0.3.1
 
 # リリース用ワークフローの完了を待ち、Release を確認して説明を差し替える
 gh run watch <run-id> --exit-status
-gh release view v0.4.0
-gh release edit v0.4.0 --notes-file <説明のファイル>
+gh release view v0.3.1
+gh release edit v0.3.1 --notes-file <説明のファイル>
 ```
 
 - `.github/workflows/release.yml` が `v*` タグの push で起動し、Windows 上で lint・型チェック・テスト → `build:electron` → `electron-builder --publish never` を実行して、`release/` 内の `*.exe`・`*.exe.blockmap`・`latest.yml` を GitHub Release に添付する。
