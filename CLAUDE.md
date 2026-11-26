@@ -29,7 +29,7 @@ MindMeister 風のマインドマップアプリケーション。フロント�
 
 ## 作業状況の注意
 
-- `pnpm package`（electron-builder によるインストーラ作成）は Windows で動作確認済み（`release/` にインストーラができる）。GitHub Releases への公開は `.github/workflows/release.yml` が行う。自動アップデートの実際の更新（旧版 → 新版）は、自動アップデート入りの版を 2 つリリースするまで未確認。
+- `pnpm package`（electron-builder によるインストーラ作成）は Windows で動作確認済み（`release/` にインストーラができる）。GitHub Releases への公開は `.github/workflows/release.yml` が行う。`main` への PR と push では `.github/workflows/ci.yml` が lint・型チェック・テスト・ビルドを確認する（詳細は `mindmap-app-commands` スキル）。自動アップデートの実際の更新（旧版 → 新版）は、自動アップデート入りの版を 2 つリリースするまで未確認。
 - Electron 版の動作確認は `npx electron . --remote-debugging-port=9333` で起動し、Chrome DevTools Protocol 経由でレンダラーを操作する方法で行った（手順は `mindmap-app-commands` スキル参照）。
 
 ## 詳細情報（Skill）

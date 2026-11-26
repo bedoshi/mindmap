@@ -43,6 +43,24 @@ git push origin v0.1.0
 - Release の説明文は自動生成のままなので、必要なら `gh release edit <タグ> --notes ...` で変更点の要約に差し替える。
 - タグ名と `package.json` の `version` は自動では連動しない。インストーラのファイル名は `version` で決まるので、タグを打つ前に揃えておく。
 
+## CI（GitHub Actions）
+
+- `.github/workflows/ci.yml` が `main` への PR（作成・更新）と `main` への push（PR のマージを含む）で起動し、Ubuntu 上で次を順に実行する。どれか 1 つでも失敗すると CI が失敗する。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm lint                     # oxlint
+pnpm exec tsc -b              # 型チェック（app / node / electron の 3 構成）
+pnpm test:run                 # Vitest
+pnpm exec vite build          # Web 版のビルド
+pnpm exec electron-vite build # Electron 版のビルド（インストーラは作らない）
+```
+
+- 手元で同じ確認をするときも上の順に実行すればよい（`pnpm build` は `tsc -b && vite build`、`pnpm build:electron` は `tsc -b && electron-vite build`）。
+- CI では環境変数 `ELECTRON_SKIP_BINARY_DOWNLOAD=1` で Electron 本体のダウンロードを省いている。テストとビルドは Electron の型定義しか使わないため。Electron を実際に起動する確認（E2E など）を CI に足す場合は、この設定を外すこと。
+- 同じ PR に新しいコミットを push すると、実行中の古い CI は取り消される（`concurrency`）。
+- インストーラの作成（`electron-builder`）は CI では行わず、リリース用ワークフロー（`release.yml`）だけが行う。
+
 ## 型チェックだけ行う
 
 ```bash
