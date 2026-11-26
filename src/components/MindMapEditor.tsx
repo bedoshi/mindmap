@@ -160,7 +160,11 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const initialMapRef = useRef(initialMap)
   const dragRef = useRef<DragState | null>(null)
-  /** フローティングノード作成直後の mousedown でフォーカスが外れて入力欄が閉じないようにする */
+  /**
+   * pointerdown で編集を始めた直後の mousedown の既定動作（フォーカス移動・文字の選択）を 1 回だけ止める。
+   * 止めないと、開いたばかりの入力欄からフォーカスが外れて編集が確定・終了したり、全選択が解除されたりする。
+   * 対象は、ノード・セルのダブルクリックでの編集開始と、余白のダブルクリックでのフローティングノード作成
+   */
   const keepFocusRef = useRef(false)
   const lastTapRef = useRef<{ id: NodeId | null; time: number; x: number; y: number } | null>(null)
 
@@ -730,6 +734,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
       const now = e.timeStamp
       if (last && last.id === id && now - last.time < DOUBLE_TAP_MS) {
         lastTapRef.current = null
+        // 既存のテキストを全選択した状態で編集を始める。続く mousedown で選択が崩れないようにする
+        keepFocusRef.current = true
         const cell = cellAt(target)
         if (cell) startCellEdit(id, cell.row, cell.column)
         else startEdit(id)
@@ -878,7 +884,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
     })
   }
 
-  /** pointerdown の直後に来る mousedown の既定動作（フォーカス移動）を、作成直後の 1 回だけ止める */
+  /** pointerdown の直後に来る mousedown の既定動作（フォーカス移動・文字の選択）を、編集開始直後の 1 回だけ止める */
   const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (!keepFocusRef.current) return
     keepFocusRef.current = false
