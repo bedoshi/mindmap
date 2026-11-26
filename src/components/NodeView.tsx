@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
 import type { NodeLayout } from '../model/layout'
 import type { MindMapNode } from '../model/types'
+import { TableContent, type CellDraft } from './TableContent'
 
 interface Props {
   node: MindMapNode
@@ -19,6 +20,12 @@ interface Props {
   /** 編集中に Tab を押したとき（確定して子ノードを追加する） */
   onTabFromEdit: () => void
   onToggleCollapse: () => void
+  /** テーブルノードで編集中のセル。編集していなければ null */
+  cellEdit: CellDraft | null
+  onCellDraftChange: (text: string) => void
+  onCellCommit: (row: number, column: number) => void
+  onCellCancel: () => void
+  onCellTab: (backward: boolean) => void
 }
 
 export function NodeView({
@@ -35,6 +42,11 @@ export function NodeView({
   onCancel,
   onTabFromEdit,
   onToggleCollapse,
+  cellEdit,
+  onCellDraftChange,
+  onCellCommit,
+  onCellCancel,
+  onCellTab,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const editing = draft !== null
@@ -63,10 +75,11 @@ export function NodeView({
 
   const classes = ['node', `depth-${Math.min(layout.depth, 2)}`, `side-${layout.side}`]
   if (selected) classes.push('selected')
-  if (editing) classes.push('editing')
+  if (editing || cellEdit) classes.push('editing')
   if (dragging) classes.push('dragging')
   if (dropTarget) classes.push('drop-target')
   if (node.collapsed) classes.push('collapsed')
+  if (node.table) classes.push('table-node')
 
   const style = {
     left: layout.x,
@@ -79,7 +92,17 @@ export function NodeView({
 
   return (
     <div className={classes.join(' ')} style={style} data-node-id={node.id}>
-      {editing ? (
+      {node.table && layout.table ? (
+        <TableContent
+          table={node.table}
+          layout={layout.table}
+          cellEdit={cellEdit}
+          onDraftChange={onCellDraftChange}
+          onCommit={onCellCommit}
+          onCancel={onCellCancel}
+          onTab={onCellTab}
+        />
+      ) : editing ? (
         <input
           ref={inputRef}
           className="node-input"

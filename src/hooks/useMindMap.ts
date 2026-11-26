@@ -3,10 +3,16 @@ import {
   addChild,
   addFloatingRoot,
   addSibling,
+  addTableChild,
+  insertTableColumn,
+  insertTableRow,
   moveNode,
   moveRoot,
   removeNode,
+  removeTableColumn,
+  removeTableRow,
   toggleCollapse,
+  updateTableCell,
   updateText,
 } from '../model/mindmap'
 import type { MindMap, NodeId } from '../model/types'
@@ -33,6 +39,12 @@ type EditAction =
   | { type: 'toggleCollapse'; id: NodeId }
   | { type: 'move'; id: NodeId; parentId: NodeId; index?: number }
   | { type: 'moveRoot'; id: NodeId; x: number; y: number }
+  | { type: 'addTableChild'; parentId: NodeId; id: NodeId }
+  | { type: 'updateTableCell'; id: NodeId; row: number; column: number; text: string }
+  | { type: 'insertTableRow'; id: NodeId; index: number }
+  | { type: 'removeTableRow'; id: NodeId; index: number }
+  | { type: 'insertTableColumn'; id: NodeId; index: number }
+  | { type: 'removeTableColumn'; id: NodeId; index: number }
 
 type Action = EditAction | { type: 'undo' } | { type: 'redo' }
 
@@ -54,6 +66,18 @@ function applyEdit(map: MindMap, action: EditAction): MindMap {
       return moveNode(map, action.id, action.parentId, action.index)
     case 'moveRoot':
       return moveRoot(map, action.id, action.x, action.y)
+    case 'addTableChild':
+      return addTableChild(map, action.parentId, action.id)
+    case 'updateTableCell':
+      return updateTableCell(map, action.id, action.row, action.column, action.text)
+    case 'insertTableRow':
+      return insertTableRow(map, action.id, action.index)
+    case 'removeTableRow':
+      return removeTableRow(map, action.id, action.index)
+    case 'insertTableColumn':
+      return insertTableColumn(map, action.id, action.index)
+    case 'removeTableColumn':
+      return removeTableColumn(map, action.id, action.index)
   }
 }
 
@@ -122,6 +146,31 @@ export function useMindMap(initialMap: MindMap) {
     (id: NodeId, x: number, y: number) => dispatch({ type: 'moveRoot', id, x, y }),
     [],
   )
+  const addTable = useCallback(
+    (parentId: NodeId, id: NodeId) => dispatch({ type: 'addTableChild', parentId, id }),
+    [],
+  )
+  const setTableCell = useCallback(
+    (id: NodeId, row: number, column: number, text: string) =>
+      dispatch({ type: 'updateTableCell', id, row, column, text }),
+    [],
+  )
+  const insertRow = useCallback(
+    (id: NodeId, index: number) => dispatch({ type: 'insertTableRow', id, index }),
+    [],
+  )
+  const removeRow = useCallback(
+    (id: NodeId, index: number) => dispatch({ type: 'removeTableRow', id, index }),
+    [],
+  )
+  const insertColumn = useCallback(
+    (id: NodeId, index: number) => dispatch({ type: 'insertTableColumn', id, index }),
+    [],
+  )
+  const removeColumn = useCallback(
+    (id: NodeId, index: number) => dispatch({ type: 'removeTableColumn', id, index }),
+    [],
+  )
   const undo = useCallback(() => dispatch({ type: 'undo' }), [])
   const redo = useCallback(() => dispatch({ type: 'redo' }), [])
 
@@ -137,6 +186,12 @@ export function useMindMap(initialMap: MindMap) {
     toggleCollapse: toggle,
     move,
     moveRoot: moveRootTo,
+    addTableChild: addTable,
+    setTableCell,
+    insertTableRow: insertRow,
+    removeTableRow: removeRow,
+    insertTableColumn: insertColumn,
+    removeTableColumn: removeColumn,
     undo,
     redo,
   }

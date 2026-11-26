@@ -22,6 +22,15 @@ const H_GAP = 56
 /** 兄弟間の垂直距離 */
 const V_GAP = 14
 
+/** テーブルノードの 1 行の高さ（セル下端の区切り線 1px を含む） */
+export const TABLE_ROW_HEIGHT = 28
+/** テーブルのセルの左右の余白 */
+export const TABLE_CELL_PAD = 8
+/** テーブルの列の最小幅（セル右端の区切り線 1px を含む） */
+export const TABLE_MIN_COLUMN_WIDTH = 48
+/** テーブルノードの外枠の太さ（CSS の border と一致させる） */
+export const TABLE_BORDER = 2
+
 export const BRANCH_COLORS = [
   '#e05d5d',
   '#f08c2e',
@@ -36,6 +45,13 @@ export const ROOT_COLOR = '#2d3748'
 
 export type LayoutSide = Side | 'center'
 
+/** テーブルノードのセル配置。座標はノード左上（外枠の内側）からの相対位置 */
+export interface TableLayout {
+  /** 各列の幅（区切り線 1px を含む） */
+  columnWidths: number[]
+  rowHeight: number
+}
+
 export interface NodeLayout {
   id: NodeId
   x: number
@@ -46,6 +62,8 @@ export interface NodeLayout {
   color: string
   depth: number
   font: string
+  /** テーブルノードのときのみ */
+  table?: TableLayout
 }
 
 export interface EdgeLayout {
@@ -86,6 +104,7 @@ interface NodeSize {
   width: number
   height: number
   font: string
+  table?: TableLayout
 }
 
 export function measureNode(text: string, isRoot: boolean): NodeSize {
@@ -96,6 +115,25 @@ export function measureNode(text: string, isRoot: boolean): NodeSize {
     width: Math.max(MIN_WIDTH, textWidth + H_PAD * 2),
     height: isRoot ? ROOT_HEIGHT : NODE_HEIGHT,
     font,
+  }
+}
+
+/** テーブルノードの大きさ。列幅はその列で一番長いセルのテキストに合わせる */
+export function measureTable(table: string[][]): NodeSize {
+  const columnCount = table[0]?.length ?? 0
+  const columnWidths = Array.from({ length: columnCount }, (_, column) => {
+    const textWidth = Math.max(
+      0,
+      ...table.map((cells) => Math.ceil(measureTextWidth(cells[column] ?? '', NODE_FONT)) + 2),
+    )
+    return Math.max(TABLE_MIN_COLUMN_WIDTH, textWidth + TABLE_CELL_PAD * 2 + 1)
+  })
+  const innerWidth = columnWidths.reduce((sum, w) => sum + w, 0)
+  return {
+    width: innerWidth + TABLE_BORDER * 2,
+    height: table.length * TABLE_ROW_HEIGHT + TABLE_BORDER * 2,
+    font: NODE_FONT,
+    table: { columnWidths, rowHeight: TABLE_ROW_HEIGHT },
   }
 }
 
@@ -114,7 +152,7 @@ export function computeLayout(map: MindMap): Layout {
 
   const prepare = (id: NodeId, isRoot: boolean): number => {
     const node = map.nodes[id]
-    const size = measureNode(node.text, isRoot)
+    const size = node.table && !isRoot ? measureTable(node.table) : measureNode(node.text, isRoot)
     sizes[id] = size
     let total = 0
     visibleChildren(map, id).forEach((childId, i) => {
@@ -157,6 +195,7 @@ export function computeLayout(map: MindMap): Layout {
       depth,
       font: size.font,
     }
+    if (size.table) nodes[id].table = size.table
     const children = visibleChildren(map, id)
     let y = centerY - stackHeight(children) / 2
     const childInnerX = side === 'right' ? x + size.width + H_GAP : x - H_GAP

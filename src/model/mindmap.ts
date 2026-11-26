@@ -205,3 +205,97 @@ export function moveNode(map: MindMap, id: NodeId, newParentId: NodeId, index?: 
   nodes[id] = withSide({ ...node, parentId: newParentId }, side)
   return { ...map, nodes }
 }
+
+// ---- テーブルノード ----
+
+/** 新しく追加するテーブルの既定の大きさ */
+export const DEFAULT_TABLE_ROWS = 2
+export const DEFAULT_TABLE_COLUMNS = 2
+
+export function createTable(rows = DEFAULT_TABLE_ROWS, columns = DEFAULT_TABLE_COLUMNS): string[][] {
+  return Array.from({ length: Math.max(1, rows) }, () =>
+    Array.from({ length: Math.max(1, columns) }, () => ''),
+  )
+}
+
+export function isTableNode(node: MindMapNode | undefined): boolean {
+  return node?.table !== undefined
+}
+
+/** parentId の末尾に、空のテーブルを持つ子ノード（テーブルノード）を追加する */
+export function addTableChild(
+  map: MindMap,
+  parentId: NodeId,
+  id: NodeId,
+  table: string[][] = createTable(),
+): MindMap {
+  const added = addChild(map, parentId, id, '')
+  if (added === map) return map
+  return { ...added, nodes: { ...added.nodes, [id]: { ...added.nodes[id], table } } }
+}
+
+function withTable(map: MindMap, id: NodeId, table: string[][]): MindMap {
+  return { ...map, nodes: { ...map.nodes, [id]: { ...map.nodes[id], table } } }
+}
+
+export function updateTableCell(
+  map: MindMap,
+  id: NodeId,
+  row: number,
+  column: number,
+  text: string,
+): MindMap {
+  const table = map.nodes[id]?.table
+  if (!table || table[row]?.[column] === undefined || table[row][column] === text) return map
+  return withTable(
+    map,
+    id,
+    table.map((cells, r) => (r === row ? cells.map((c, col) => (col === column ? text : c)) : cells)),
+  )
+}
+
+/** index の位置（0 〜 行数）に空の行を挿入する */
+export function insertTableRow(map: MindMap, id: NodeId, index: number): MindMap {
+  const table = map.nodes[id]?.table
+  if (!table || index < 0 || index > table.length) return map
+  const rows = [...table]
+  rows.splice(index, 0, table[0].map(() => ''))
+  return withTable(map, id, rows)
+}
+
+/** index の行を削除する。最後の 1 行は削除できない */
+export function removeTableRow(map: MindMap, id: NodeId, index: number): MindMap {
+  const table = map.nodes[id]?.table
+  if (!table || table.length <= 1 || index < 0 || index >= table.length) return map
+  return withTable(
+    map,
+    id,
+    table.filter((_, r) => r !== index),
+  )
+}
+
+/** index の位置（0 〜 列数）に空の列を挿入する */
+export function insertTableColumn(map: MindMap, id: NodeId, index: number): MindMap {
+  const table = map.nodes[id]?.table
+  if (!table || index < 0 || index > table[0].length) return map
+  return withTable(
+    map,
+    id,
+    table.map((cells) => {
+      const next = [...cells]
+      next.splice(index, 0, '')
+      return next
+    }),
+  )
+}
+
+/** index の列を削除する。最後の 1 列は削除できない */
+export function removeTableColumn(map: MindMap, id: NodeId, index: number): MindMap {
+  const table = map.nodes[id]?.table
+  if (!table || table[0].length <= 1 || index < 0 || index >= table[0].length) return map
+  return withTable(
+    map,
+    id,
+    table.map((cells) => cells.filter((_, c) => c !== index)),
+  )
+}

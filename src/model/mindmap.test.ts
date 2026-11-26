@@ -4,15 +4,22 @@ import {
   addFloatingRoot,
   allRootIds,
   addSibling,
+  addTableChild,
   collectSubtree,
   countSubtree,
   createMindMap,
+  createTable,
+  insertTableColumn,
+  insertTableRow,
   isDescendant,
   moveNode,
   moveRoot,
   nodeToSelectAfterRemove,
   removeNode,
+  removeTableColumn,
+  removeTableRow,
   toggleCollapse,
+  updateTableCell,
   updateText,
   visibleChildren,
 } from './mindmap'
@@ -334,5 +341,74 @@ describe('フローティングノード', () => {
     expect(map.nodes['a1'].side).toBeDefined()
     expect(map.nodes['f'].children).toEqual(['a1'])
     expect(map.nodes['a'].children).toEqual(['a2'])
+  })
+})
+
+describe('テーブルノード', () => {
+  const withTable = () => {
+    const map = createMindMap('中心')
+    return addTableChild(map, map.rootId, 't', [
+      ['a', 'b'],
+      ['c', 'd'],
+    ])
+  }
+
+  it('createTable は指定した大きさの空のセルを作る（最低 1 行 1 列）', () => {
+    expect(createTable()).toEqual([
+      ['', ''],
+      ['', ''],
+    ])
+    expect(createTable(0, 0)).toEqual([['']])
+  })
+
+  it('addTableChild は空テキストでテーブルを持つ子ノードを追加する', () => {
+    const base = createMindMap('中心')
+
+    const map = addTableChild(base, base.rootId, 't')
+
+    expect(map.nodes['t']).toMatchObject({ text: '', parentId: base.rootId, table: createTable() })
+    expect(map.nodes[base.rootId].children).toEqual(['t'])
+    expect(addTableChild(map, 'missing', 'x')).toBe(map)
+  })
+
+  it('updateTableCell はセルの文字列を変える。範囲外・同じ値なら同じ参照を返す', () => {
+    const map = withTable()
+
+    expect(updateTableCell(map, 't', 1, 0, 'X').nodes['t'].table).toEqual([
+      ['a', 'b'],
+      ['X', 'd'],
+    ])
+    expect(updateTableCell(map, 't', 0, 0, 'a')).toBe(map)
+    expect(updateTableCell(map, 't', 2, 0, 'X')).toBe(map)
+    expect(updateTableCell(map, map.rootId, 0, 0, 'X')).toBe(map)
+  })
+
+  it('insertTableRow / insertTableColumn は指定位置に空の行・列を挿入する', () => {
+    const map = withTable()
+
+    expect(insertTableRow(map, 't', 1).nodes['t'].table).toEqual([
+      ['a', 'b'],
+      ['', ''],
+      ['c', 'd'],
+    ])
+    expect(insertTableRow(map, 't', 2).nodes['t'].table?.at(-1)).toEqual(['', ''])
+    expect(insertTableColumn(map, 't', 0).nodes['t'].table).toEqual([
+      ['', 'a', 'b'],
+      ['', 'c', 'd'],
+    ])
+    expect(insertTableColumn(map, 't', 2).nodes['t'].table?.[0]).toEqual(['a', 'b', ''])
+    expect(insertTableRow(map, 't', 3)).toBe(map)
+    expect(insertTableColumn(map, 't', -1)).toBe(map)
+  })
+
+  it('removeTableRow / removeTableColumn は指定した行・列を削除する。最後の 1 行・1 列は消せない', () => {
+    const map = withTable()
+
+    expect(removeTableRow(map, 't', 0).nodes['t'].table).toEqual([['c', 'd']])
+    expect(removeTableColumn(map, 't', 1).nodes['t'].table).toEqual([['a'], ['c']])
+    const single = removeTableColumn(removeTableRow(map, 't', 0), 't', 0)
+    expect(single.nodes['t'].table).toEqual([['d']])
+    expect(removeTableRow(single, 't', 0)).toBe(single)
+    expect(removeTableColumn(single, 't', 0)).toBe(single)
   })
 })

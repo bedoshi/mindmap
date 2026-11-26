@@ -20,6 +20,11 @@ export interface MindMapNode {
    */
   x?: number
   y?: number
+  /**
+   * テーブルをコンテンツとして持つノード（テーブルノード）のセルの文字列。rows[行][列]。
+   * すべての行は同じ列数で、1 行 1 列以上。テーブルノードでは text は使わない（空文字）。
+   */
+  table?: string[][]
 }
 
 export interface MindMap {
