@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   addChild,
   addFloatingRoot,
+  addFloatingTable,
+  addTableChild,
   createMindMap,
   moveRoot,
   toggleCollapse,
@@ -168,5 +170,71 @@ describe('titleOf', () => {
 
   it('ルートのテキストが空なら「無題のマップ」を返す', () => {
     expect(titleOf(createMindMap(''))).toBe('無題のマップ')
+  })
+})
+
+describe('テーブルノードの XML', () => {
+  it('table / row / cell 要素として書き出し、読み込むと同じテーブルに戻る', () => {
+    let map = createMindMap('中心')
+    map = addTableChild(map, map.rootId, 't', [
+      ['名前', '<値> & "引用"'],
+      ['', '改行なし'],
+    ])
+    map = addChild(map, 't', 'c', 'テーブルの子')
+
+    const xml = mindMapToXml(map)
+
+    expect(xml).toMatch(/<node id="t" text="" [^>]*>\n\s+<table>/)
+    expect(xml).toContain('<row><cell>名前</cell><cell>&lt;値&gt; &amp; "引用"</cell></row>')
+    expect(xml).toContain('<row><cell/><cell>改行なし</cell></row>')
+    const loaded = xmlToMindMap(xml)
+    expect(loaded.nodes['t'].table).toEqual(map.nodes['t'].table)
+    expect(loaded.nodes['t'].children).toEqual(['c'])
+    expect(loaded.nodes['c'].text).toBe('テーブルの子')
+  })
+
+  it('子の無いテーブルノードも開始・終了タグで書き出す', () => {
+    const base = createMindMap('中心')
+    const xml = mindMapToXml(addTableChild(base, base.rootId, 't', [['x']]))
+
+    expect(xml).toMatch(/<node id="t"[^>]*[^/]>\n\s+<table>\n\s+<row><cell>x<\/cell><\/row>\n\s+<\/table>\n\s+<\/node>/)
+  })
+
+  it('行ごとに列数が違う場合は空セルで揃え、行の無い table は無視する', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+      <mindmap version="1">
+        <node id="r" text="中心">
+          <node id="t" text="無視される"><table><row><cell>a</cell></row><row><cell>b</cell><cell>c</cell></row></table></node>
+          <node id="e" text="空"><table/></node>
+        </node>
+      </mindmap>`
+
+    const map = xmlToMindMap(xml)
+
+    expect(map.nodes['t'].table).toEqual([
+      ['a', ''],
+      ['b', 'c'],
+    ])
+    expect(map.nodes['t'].text).toBe('')
+    expect(map.nodes['e'].table).toBeUndefined()
+    expect(map.nodes['e'].text).toBe('空')
+  })
+
+  it('テーブルのフローティングノードも書き出し・読み込みで元に戻る', () => {
+    const map = addFloatingTable(createMindMap('中心'), 'f', 400, 300, [['x', 'y']])
+
+    const loaded = xmlToMindMap(mindMapToXml(map))
+
+    expect(loaded.floatingRootIds).toEqual(['f'])
+    expect(loaded.nodes['f']).toMatchObject({ text: '', x: 400, y: 300, table: [['x', 'y']] })
+  })
+
+  it('メインのルートの table は無視する（テーブルノードになれるのはメインのルート以外）', () => {
+    const map = xmlToMindMap(
+      '<mindmap version="1"><node id="r" text="中心"><table><row><cell>a</cell></row></table></node></mindmap>',
+    )
+
+    expect(map.nodes['r'].table).toBeUndefined()
+    expect(map.nodes['r'].text).toBe('中心')
   })
 })

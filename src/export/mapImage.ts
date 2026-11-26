@@ -1,4 +1,12 @@
-import { ROOT_COLOR, computeLayout, type Bounds, type Layout, type NodeLayout } from '../model/layout'
+import {
+  ROOT_COLOR,
+  TABLE_BORDER,
+  TABLE_CELL_PAD,
+  computeLayout,
+  type Bounds,
+  type Layout,
+  type NodeLayout,
+} from '../model/layout'
 import { countSubtree } from '../model/mindmap'
 import type { MindMap } from '../model/types'
 
@@ -24,6 +32,9 @@ const TEXT_COLOR = '#1f2430'
 const LIGHT_TEXT_COLOR = '#ffffff'
 const PLACEHOLDER_TEXT = '（空）'
 const PLACEHOLDER_ALPHA = 0.6
+/** テーブルの区切り線の不透明度（CSS の color-mix 45% に合わせる） */
+const TABLE_GRID_ALPHA = 0.45
+const TABLE_RADIUS = 6
 
 export const IMAGE_FILE_EXTENSION = '.png'
 
@@ -70,8 +81,73 @@ export function computeImageSize(
   }
 }
 
+/** テーブルノードを描く。画面と同じく深さに関わらず白地 + 枝の色の枠線で、セルの文字は左寄せ */
+function drawTableNode(ctx: CanvasRenderingContext2D, table: string[][], node: NodeLayout): void {
+  const { x, y, width, height } = node
+  const tableLayout = node.table!
+
+  ctx.beginPath()
+  ctx.roundRect(x, y, width, height, TABLE_RADIUS)
+  ctx.fillStyle = SURFACE_COLOR
+  ctx.fill()
+
+  const innerX = x + TABLE_BORDER
+  const innerY = y + TABLE_BORDER
+  const innerWidth = width - TABLE_BORDER * 2
+  const innerHeight = height - TABLE_BORDER * 2
+
+  // 区切り線（各列の右端・各行の下端の 1px。最後の列・行には引かない）
+  ctx.globalAlpha = TABLE_GRID_ALPHA
+  ctx.fillStyle = node.color
+  let columnX = innerX
+  tableLayout.columnWidths.slice(0, -1).forEach((w) => {
+    columnX += w
+    ctx.fillRect(columnX - 1, innerY, 1, innerHeight)
+  })
+  for (let row = 1; row < table.length; row++) {
+    ctx.fillRect(innerX, innerY + row * tableLayout.rowHeight - 1, innerWidth, 1)
+  }
+  ctx.globalAlpha = 1
+
+  ctx.font = node.font
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = TEXT_COLOR
+  table.forEach((cells, row) => {
+    let cellX = innerX
+    cells.forEach((cell, column) => {
+      const cellWidth = tableLayout.columnWidths[column]
+      if (cell !== '') {
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(cellX, innerY + row * tableLayout.rowHeight, cellWidth - 1, tableLayout.rowHeight)
+        ctx.clip()
+        ctx.fillText(
+          cell,
+          cellX + TABLE_CELL_PAD,
+          innerY + row * tableLayout.rowHeight + (tableLayout.rowHeight - 1) / 2,
+        )
+        ctx.restore()
+      }
+      cellX += cellWidth
+    })
+  })
+
+  ctx.beginPath()
+  ctx.roundRect(x + 1, y + 1, width - 2, height - 2, TABLE_RADIUS - 1)
+  ctx.strokeStyle = node.color
+  ctx.lineWidth = 2
+  ctx.stroke()
+}
+
 function drawNode(ctx: CanvasRenderingContext2D, map: MindMap, node: NodeLayout): void {
   const { x, y, width, height, depth } = node
+  const mapNode = map.nodes[node.id]
+  if (mapNode.table && node.table) {
+    drawTableNode(ctx, mapNode.table, node)
+    drawCollapsedBadge(ctx, map, node)
+    return
+  }
   const isRoot = depth === 0
   const radius = isRoot ? 24 : 8
 
@@ -91,7 +167,6 @@ function drawNode(ctx: CanvasRenderingContext2D, map: MindMap, node: NodeLayout)
     ctx.fill()
   }
 
-  const mapNode = map.nodes[node.id]
   const hasText = mapNode.text !== ''
   ctx.font = node.font
   ctx.textAlign = 'center'
@@ -101,7 +176,13 @@ function drawNode(ctx: CanvasRenderingContext2D, map: MindMap, node: NodeLayout)
   ctx.fillText(hasText ? mapNode.text : PLACEHOLDER_TEXT, x + width / 2, y + height / 2)
   ctx.globalAlpha = 1
 
-  // 折りたたまれているノードには、画面と同じく隠れているノード数のバッジを付ける
+  drawCollapsedBadge(ctx, map, node)
+}
+
+/** 折りたたまれているノードには、画面と同じく隠れているノード数のバッジを付ける */
+function drawCollapsedBadge(ctx: CanvasRenderingContext2D, map: MindMap, node: NodeLayout): void {
+  const { x, y, width, height } = node
+  const mapNode = map.nodes[node.id]
   if (mapNode.collapsed && mapNode.children.length > 0 && node.side !== 'center') {
     const cx = node.side === 'right' ? x + width + 2 : x - 2
     const cy = y + height / 2
@@ -113,6 +194,8 @@ function drawNode(ctx: CanvasRenderingContext2D, map: MindMap, node: NodeLayout)
     ctx.lineWidth = 2
     ctx.stroke()
     ctx.font = '11px system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
     ctx.fillStyle = TEXT_COLOR
     ctx.fillText(String(countSubtree(map, node.id) - 1), cx, cy)
   }

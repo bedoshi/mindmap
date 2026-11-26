@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computeLayout } from '../model/layout'
-import { addChild, addFloatingRoot, createMindMap, toggleCollapse } from '../model/mindmap'
+import {
+  addChild,
+  addFloatingRoot,
+  addTableChild,
+  createMindMap,
+  toggleCollapse,
+} from '../model/mindmap'
 import {
   IMAGE_PADDING,
   MAX_CANVAS_PIXELS,
@@ -124,6 +130,23 @@ describe('drawMapImage', () => {
     drawMapImage(ctx, map, layout, computeImageSize(layout.bounds))
 
     expect(calls.filter((c) => c.name === 'fillText').map((c) => c.args[0])).toContain('（空）')
+  })
+
+  it('テーブルノードは空でないセルの文字だけを描き、「（空）」は描かない', () => {
+    vi.stubGlobal('Path2D', class {})
+    let map = createMindMap('中心')
+    map = addTableChild(map, map.rootId, 't', [
+      ['見出し', ''],
+      ['値1', '値2'],
+    ])
+    const layout = computeLayout(map)
+    const { ctx, calls } = createFakeContext()
+
+    drawMapImage(ctx, map, layout, computeImageSize(layout.bounds))
+
+    const texts = calls.filter((c) => c.name === 'fillText').map((c) => c.args[0])
+    expect(texts).toEqual(expect.arrayContaining(['見出し', '値1', '値2']))
+    expect(texts).not.toContain('（空）')
   })
 })
 

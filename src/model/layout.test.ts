@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { BRANCH_COLORS, computeLayout, measureNode, ROOT_COLOR } from './layout'
-import { addChild, addFloatingRoot, createMindMap, moveRoot, toggleCollapse } from './mindmap'
+import {
+  BRANCH_COLORS,
+  computeLayout,
+  measureNode,
+  measureTable,
+  ROOT_COLOR,
+  TABLE_BORDER,
+  TABLE_MIN_COLUMN_WIDTH,
+  TABLE_ROW_HEIGHT,
+} from './layout'
+import {
+  addChild,
+  addFloatingRoot,
+  addFloatingTable,
+  addTableChild,
+  createMindMap,
+  moveRoot,
+  toggleCollapse,
+} from './mindmap'
 
 /**
  * ルート直下に a（右）と b（左）、a の下に a1, a2 を持つマップ。
@@ -154,5 +171,54 @@ describe('computeLayout（フローティングノード・ルートの移動）
 
     expect(layout.bounds.maxX).toBeGreaterThan(1000)
     expect(layout.bounds.maxY).toBeGreaterThan(800)
+  })
+})
+
+describe('テーブルノードのレイアウト', () => {
+  it('高さは行数 × 行の高さ + 外枠、幅は列幅の合計 + 外枠になる', () => {
+    const size = measureTable([
+      ['', ''],
+      ['', ''],
+      ['', ''],
+    ])
+
+    expect(size.height).toBe(TABLE_ROW_HEIGHT * 3 + TABLE_BORDER * 2)
+    expect(size.table?.columnWidths).toEqual([TABLE_MIN_COLUMN_WIDTH, TABLE_MIN_COLUMN_WIDTH])
+    expect(size.width).toBe(TABLE_MIN_COLUMN_WIDTH * 2 + TABLE_BORDER * 2)
+  })
+
+  it('列幅はその列で一番長いセルに合わせる', () => {
+    const size = measureTable([
+      ['短', 'とても長いセルのテキストです'],
+      ['これも少し長いセル', ''],
+    ])
+
+    const [first, second] = size.table!.columnWidths
+    expect(first).toBeGreaterThan(TABLE_MIN_COLUMN_WIDTH)
+    expect(second).toBeGreaterThan(first)
+  })
+
+  it('テーブルノードの NodeLayout にはセル配置（table）が付き、テキストのノードには付かない', () => {
+    let map = createMindMap('中心')
+    map = addTableChild(map, map.rootId, 't', [['a', 'b']])
+    map = addChild(map, map.rootId, 'n', 'テキスト')
+
+    const layout = computeLayout(map)
+
+    expect(layout.nodes['t'].table?.columnWidths).toHaveLength(2)
+    expect(layout.nodes['t'].height).toBe(TABLE_ROW_HEIGHT + TABLE_BORDER * 2)
+    expect(layout.nodes['n'].table).toBeUndefined()
+  })
+
+  it('テーブルのフローティングノードは、指定した中心座標にテーブルの大きさで配置する', () => {
+    const map = addFloatingTable(createMindMap('中心'), 'f', 300, 200, [['a'], ['b'], ['c']])
+
+    const f = computeLayout(map).nodes['f']
+
+    expect(f.table?.columnWidths).toHaveLength(1)
+    expect(f.height).toBe(TABLE_ROW_HEIGHT * 3 + TABLE_BORDER * 2)
+    expect(f.x + f.width / 2).toBeCloseTo(300)
+    expect(f.y + f.height / 2).toBeCloseTo(200)
+    expect(f).toMatchObject({ side: 'center', depth: 0 })
   })
 })

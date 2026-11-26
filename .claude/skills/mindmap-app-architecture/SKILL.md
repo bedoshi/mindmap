@@ -56,8 +56,10 @@ src/
     useMindMap.ts          開いている 1 マップの履歴付き状態管理（Undo/Redo）
     useMapLibrary.ts       複数マップの一覧・切り替え・作成・削除と自動保存
   components/
-    MindMapEditor.tsx      エディタ本体（選択・編集・キーボード・パン/ズーム・ドラッグ・保存操作）
-    NodeView.tsx           ノード1つの描画（テキスト / 編集用 input / 折りたたみボタン）
+    MindMapEditor.tsx      エディタ本体（選択・編集・キーボード・パン/ズーム・ドラッグ・保存操作・右クリックメニューの項目）
+    NodeView.tsx           ノード1つの描画（テキスト / 編集用 input / テーブル / 折りたたみボタン）
+    TableContent.tsx       テーブルノードの中身（セルの格子と、編集中のセルの input）
+    ContextMenu.tsx        右クリックメニュー（表示専用。項目と処理は MindMapEditor が渡す）
     Toolbar.tsx            ツールバー（表示専用。状態は MindMapEditor が持つ）
     MapListPanel.tsx       マップ一覧パネル（表示専用）
 ```
@@ -69,6 +71,7 @@ src/
 - `MindMapNode.x / y` は根のノードにのみ意味を持つ中心のマップ座標（省略時 0）。子孫の位置は自動レイアウトの結果で、データには持たない。
 - `MindMapNode.side`（`left` | `right`）は根（メイン・フローティング）の直下のノードにのみ付与し、ルートのどちら側に出すかを表す。それ以外のノードは親と同じ側に配置されるため持たない。
 - ノードID・マップIDは `crypto.randomUUID()` で生成する。
+- `MindMapNode.table`（`string[][]`、`rows[行][列]`）があるノードはテーブルノード。`text` は空文字で使わない。全行が同じ列数で 1 行 1 列以上という不変条件は `mindmap.ts` のテーブル操作関数（`addTableChild` / `addFloatingTable` / `updateTableCell` / `insertTableRow` / `removeTableRow` / `insertTableColumn` / `removeTableColumn`）と XML の読み込みで守る。メインのルートはテーブルノードにしない（フローティングノードはなれる。`computeLayout` も XML の読み込みもメインのルートの `table` だけを無視する）。
 
 ## 状態管理
 
@@ -92,6 +95,7 @@ src/
 - `MapStorage` インターフェース（`list / load / save / remove / describeLocation`）で保存先を抽象化し、`createStorage()` が `window.mindmapApi` の有無で実装を選ぶ。
 - **XML が正規の保存形式**。Web 版（localStorage）でも値には XML 文字列を入れ、一覧表示用にタイトルと更新日時を JSON で添えている。書き出し/読み込みのファイルも同じ XML。
 - XML では `mindmap` 直下の最初の `node` がメインのルート、2 つ目以降がフローティングノード。シリアライズ時に `computeLayout` を呼び、表示されている全ノードの中心座標を `x / y` として書き出す（根以外は参考情報で、読み込み時は根の `x / y` だけを使う）。0 は省略時と同じなので読み込み時は持たない。
+- テーブルノードは `node` の最初の子要素に `<table><row><cell>…</cell></row></table>` を書く（セルは要素の内容としてエスケープ）。`childNodeElements` が `node` 以外の子要素を無視するため、古いアプリでもテキストが空のノードとして読める。
 - XML のシリアライズは `xml.ts` で自前の文字列組み立て（インデント付き）、パースはブラウザ標準の `DOMParser`。どちらもレンダラー側で行い、Electron のメインプロセスはファイルの読み書きだけを担当する（Node には DOMParser が無いため）。
 - Electron 版の一覧取得は、ファイル一覧を取ったあと各ファイルを読み込んでタイトルを取り出す。マップ数が多くなって遅くなる場合は、メタ情報の別ファイル化を検討する。
 
@@ -99,6 +103,7 @@ src/
 
 - `mapImage.ts` は `computeLayout` の結果（`nodes` / `edges` / `bounds`）を Canvas 2D に直接描く。接続線は `layout.ts` が返す SVG パス文字列をそのまま `Path2D` に渡している。画面の DOM は使わないので、パン/ズームや画面外のノードの影響を受けない。
 - 画像サイズは `computeImageSize`（`bounds` + 余白 40px、倍率 2 を既定）。Canvas の 1 辺（16,384px）と総画素数（1 億）の上限を超えるときは倍率を下げる。
+- テーブルノードは `drawTableNode` が枠線・区切り線・セルの文字（左寄せ、セルの範囲でクリップ）を描く。
 - 描画は `drawMapImage`。`NodeView` / `App.css` の見た目（根は 24px の丸み・ダーク色、深さ 1 は枝の色で塗りつぶし、深さ 2 以降は白地に 2px の枠線）と対応しているため、ノードのスタイルを変えるときはここも合わせる。配色は画面のテーマに依存せずライトテーマ固定。
 - 書き出しは確定済みの `map` から `computeLayout` を計算し直す（編集中のドラフトや根の移動中の仮座標は含めない）。
 - `saveImage.ts` が保存先を切り替える。`window.mindmapApi` があれば `saveImage` IPC（メインプロセスが `dialog.showSaveDialog` を開き、初期位置は OS のダウンロードフォルダ）、なければ `<a download>` によるブラウザのダウンロード。
@@ -122,7 +127,8 @@ src/
 - 根の直下は `side` で左右に分け、それぞれ縦に積む。根に子を追加するときの側は `mindmap.ts` の `pickSide(map, rootId)` が部分木のノード数の少ない側を選ぶ。
 - ノード幅は Canvas の `measureText` でテキスト幅を測って決める。フォント指定（`NODE_FONT` / `ROOT_FONT`）を `NodeView` の inline style にも適用して、計測と描画のフォントを一致させている。CSS 側で padding や border を変えるときは `layout.ts` の定数と整合させること（枠線ありのノードは padding を枠線分だけ減らしている）。
 - 接続線は 3 次ベジェ曲線の SVG パス文字列として返す。枝の色は `BRANCH_COLORS` をルート直下ノードの順序で割り当てる。
-- 編集中はドラフトテキストでレイアウトを計算し、入力に合わせてノード幅が追従するようにしている。
+- 編集中はドラフトテキストでレイアウトを計算し、入力に合わせてノード幅が追従するようにしている。セル編集中も同様に、ドラフトを反映した MindMap でレイアウトする。
+- テーブルノードは `measureTable` で大きさを決め、`NodeLayout.table`（`columnWidths` / `rowHeight`）にセル配置を返す。列幅はその列の最長セルのテキスト幅 + 左右余白（`TABLE_CELL_PAD`）+ 区切り線 1px、行の高さは `TABLE_ROW_HEIGHT`、外枠は `TABLE_BORDER`。画面側は CSS grid の `grid-template-columns` にこの列幅をそのまま渡すので、`App.css` の `.table-cell` の padding・区切り線・`.node.table-node` の枠線を変えるときはこれらの定数と合わせること。
 
 ## 描画と操作（`src/components/MindMapEditor.tsx`）
 
@@ -132,7 +138,9 @@ src/
 - 余白のダブルクリックも自前判定（pointerdown の間隔と位置）で、フローティングノードを作って編集状態にする。作成直後の mousedown の既定動作（フォーカス移動）を `keepFocusRef` で 1 回止めないと、入力欄が即座に blur されて空のまま消えてしまう。`setPointerCapture` を使うため `dblclick` がノード要素に届かないことがあり、ダブルクリックは pointerdown の間隔で自前判定している（`dblclick` もフォールバックで処理）。
 - ドロップ先の判定は `document.elementFromPoint` で `[data-node-id]` を探す。ゴースト要素は `pointer-events: none`。
 - ホイールイベントは `preventDefault` が必要なため React の `onWheel` ではなく `addEventListener('wheel', ..., { passive: false })` で登録している。
-- キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。
+- キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）・セル編集中・右クリックメニュー表示中は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。
+- 右クリックは `.canvas` の `onContextMenu` で受け、`[data-node-id]` と `[data-row]`（セル）から対象を決めて `ContextMenu` を `position: fixed` で開く。ノードが無ければ余白のメニュー（`ContextMenuState` の `kind: 'canvas'`）として、右クリック位置をマップ座標に変換して持つ。メニューは window の pointerdown（キャプチャ）・Esc・resize で閉じる。
+- テーブルのセル編集は `EditState` とは別の `CellEditState`（ノード ID・行・列・ドラフト）で持つ。セルのダブルクリックは既存のダブルクリック判定の中で `[data-row]` を見てセル編集に振り分ける。`Tab` で次のセルへ移ったあとに古い input の blur が届いても誤って確定しないよう、確定（`commitCellEdit`）はセル位置を照合してから行う。
 
 ## テスト
 
@@ -148,6 +156,6 @@ src/
 - テストの書き方の方針:
   - 純粋関数（`model/`、`storage/xml.ts`）は入出力で検証する。「変更が無ければ同じ参照を返す」という約束も `toBe` で検証している。
   - hook は `renderHook` + `act`。`useMapLibrary` は `MapStorage` をメモリ実装のテストダブルに差し替えて検証する。デバウンス保存は実時間で待つ（`waitFor` の timeout を延長）。
-  - `MindMapEditor` は `MapLibrary` 型のモックを渡し、キーボード操作（Tab / Enter / Delete / Ctrl+S）とツールバー・一覧パネルの操作をユーザー視点で検証する。ノードのドラッグは jsdom に `elementFromPoint` が無いためテストしていない。
+  - `MindMapEditor` は `MapLibrary` 型のモックを渡し、キーボード操作（Tab / Enter / Delete / Ctrl+S）とツールバー・一覧パネル・右クリックメニュー（`user.pointer({ keys: '[MouseRight]' })`）・セル編集の操作をユーザー視点で検証する。ノードのドラッグは jsdom に `elementFromPoint` が無いためテストしていない。
   - 画像書き出し（`src/export/`）: 画像サイズの計算は入出力で、描画は呼び出しを記録する偽の Canvas コンテキスト（Proxy）で検証する。jsdom には Canvas の実装が無い（`getContext` は null を返すモック）ので、実際の見た目は Chromium で目視確認すること。保存先の切り替えは `window.mindmapApi` を差し替えて検証する。
   - Electron のメインプロセス（`main.ts` / `menu.ts` / `preload.ts`）は Electron 本体に依存するためテスト対象外。ファイル入出力（`mapFiles.ts`）は一時ディレクトリと `MINDMAP_DATA_DIR` で検証する。

@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { MapLibrary } from '../hooks/useMapLibrary'
-import { addChild, createMindMap } from '../model/mindmap'
+import { addChild, addTableChild, createMindMap } from '../model/mindmap'
 import type { MindMap } from '../model/types'
 import { MindMapEditor } from './MindMapEditor'
 
@@ -194,5 +194,183 @@ describe('MindMapEditor', () => {
     await user.click(screen.getByRole('button', { name: '画像書き出し' }))
 
     expect(await screen.findByText('画像の書き出しに失敗しました')).toBeInTheDocument()
+  })
+
+  describe('右クリックメニューとテーブル', () => {
+    /** 最後に通知されたマップのノード t のテーブル */
+    const reportedTable = (library: MapLibrary, id: string) =>
+      vi.mocked(library.reportChange).mock.lastCall?.[0].nodes[id]?.table
+
+    const tableMap = () => {
+      const base = createMindMap('中心')
+      return addTableChild(base, base.rootId, 't', [
+        ['A', 'B'],
+        ['C', 'D'],
+      ])
+    }
+
+    it('ノードを右クリックして「子にテーブルを追加」を選ぶと、先頭のセルが編集状態になり Tab で次のセルへ移る', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('中心') })
+      await user.click(screen.getByRole('menuitem', { name: '子にテーブルを追加' }))
+
+      const first = screen.getByRole('textbox', { name: 'セル 1 行 1 列' })
+      expect(first).toHaveFocus()
+      await user.type(first, '名前{Tab}')
+      await user.type(screen.getByRole('textbox', { name: 'セル 1 行 2 列' }), '値{Enter}')
+
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      const table = Object.values(reported!.nodes).find((n) => n.table)
+      expect(table?.table).toEqual([
+        ['名前', '値'],
+        ['', ''],
+      ])
+      expect(table?.text).toBe('')
+    })
+
+    it('テキストのノードのメニューには行・列の操作が無く、テーブルノードのメニューにはある', async () => {
+      const user = userEvent.setup()
+      renderEditor(tableMap())
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('中心') })
+      expect(screen.getByRole('menuitem', { name: '子ノードを追加' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: '下に行を追加' })).not.toBeInTheDocument()
+      // メインのルートは削除できない
+      expect(screen.getByRole('menuitem', { name: 'ノードを削除' })).toBeDisabled()
+      await user.keyboard('{Escape}')
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('A') })
+      for (const name of ['上に行を追加', '下に行を追加', '行を削除', '左に列を追加', '右に列を追加', '列を削除']) {
+        expect(screen.getByRole('menuitem', { name })).toBeEnabled()
+      }
+    })
+
+    it('右クリックしたセルを基準に行・列を追加・削除できる', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor(tableMap())
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('A') })
+      await user.click(screen.getByRole('menuitem', { name: '下に行を追加' }))
+      expect(reportedTable(library, 't')).toEqual([
+        ['A', 'B'],
+        ['', ''],
+        ['C', 'D'],
+      ])
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('D') })
+      await user.click(screen.getByRole('menuitem', { name: '右に列を追加' }))
+      expect(reportedTable(library, 't')).toEqual([
+        ['A', 'B', ''],
+        ['', '', ''],
+        ['C', 'D', ''],
+      ])
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('C') })
+      await user.click(screen.getByRole('menuitem', { name: '行を削除' }))
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('A') })
+      await user.click(screen.getByRole('menuitem', { name: '列を削除' }))
+      expect(reportedTable(library, 't')).toEqual([
+        ['B', ''],
+        ['', ''],
+      ])
+    })
+
+    it('1 行（1 列）しかないときは、行（列）の削除を選べない', async () => {
+      const user = userEvent.setup()
+      const base = createMindMap('中心')
+      renderEditor(addTableChild(base, base.rootId, 't', [['唯一']]))
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('唯一') })
+
+      expect(screen.getByRole('menuitem', { name: '行を削除' })).toBeDisabled()
+      expect(screen.getByRole('menuitem', { name: '列を削除' })).toBeDisabled()
+    })
+
+    it('テーブルノードを選択して F2 を押すと先頭のセルを編集でき、Esc で取り消せる', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor(tableMap())
+
+      await user.click(screen.getByText('B'))
+      await user.keyboard('{F2}')
+      const input = screen.getByRole('textbox', { name: 'セル 1 行 1 列' })
+      await user.clear(input)
+      await user.type(input, '変更{Escape}')
+
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+      expect(screen.getByText('A')).toBeInTheDocument()
+      expect(library.reportChange).not.toHaveBeenCalled()
+    })
+
+    it('余白を右クリックするとフローティングノード・テーブルの追加メニューが開き、ノードの操作は出ない', async () => {
+      const user = userEvent.setup()
+      const { container } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+
+      const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
+      expect(items).toEqual(['フローティングノードを追加', 'テーブルを追加'])
+    })
+
+    it('余白の右クリックメニューの「テーブルを追加」で、テーブルのフローティングノードを作って先頭のセルを編集できる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを追加' }))
+      await user.type(screen.getByRole('textbox', { name: 'セル 1 行 1 列' }), '浮遊表{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(reported?.floatingRootIds).toHaveLength(1)
+      const floating = reported!.nodes[reported!.floatingRootIds[0]]
+      expect(floating).toMatchObject({ text: '', parentId: null })
+      expect(floating.table).toEqual([
+        ['浮遊表', ''],
+        ['', ''],
+      ])
+      expect(typeof floating.x).toBe('number')
+    })
+
+    it('余白の右クリックメニューの「フローティングノードを追加」で、テキストのフローティングノードを作れる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+      await user.click(screen.getByRole('menuitem', { name: 'フローティングノードを追加' }))
+      await user.type(screen.getByRole('textbox'), '浮遊{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      const floating = reported!.nodes[reported!.floatingRootIds[0]]
+      expect(floating).toMatchObject({ text: '浮遊', parentId: null })
+      expect(floating.table).toBeUndefined()
+    })
+
+    it('テーブルのフローティングノードはメニューから削除できる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+      await user.pointer({ keys: '[MouseRight]', target: container.querySelector('.canvas')! })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを追加' }))
+      await user.type(screen.getByRole('textbox', { name: 'セル 1 行 1 列' }), '消す{Enter}')
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消す') })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを削除' }))
+
+      expect(screen.queryByText('消す')).not.toBeInTheDocument()
+      expect(vi.mocked(library.reportChange).mock.lastCall?.[0].floatingRootIds).toEqual([])
+    })
+
+    it('メニューの「テーブルを削除」でテーブルノードを削除できる', async () => {
+      const user = userEvent.setup()
+      renderEditor(tableMap())
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('A') })
+      await user.click(screen.getByRole('menuitem', { name: 'テーブルを削除' }))
+
+      expect(screen.queryByText('A')).not.toBeInTheDocument()
+    })
   })
 })

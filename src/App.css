@@ -160,6 +160,122 @@
   left: -12px;
 }
 
+/* ---- テーブルノード ---- */
+
+/*
+ * 深さに関わらず白地 + 枝の色の枠線で描く。枠線の太さと行の高さ・列幅は layout.ts の
+ * TABLE_BORDER / TABLE_ROW_HEIGHT / TABLE_CELL_PAD と一致させる（列幅はレイアウト計算の結果を grid で指定する）。
+ */
+.node.table-node {
+  display: block;
+  padding: 0;
+  border: 2px solid var(--branch-color);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  overflow: visible;
+}
+
+.node-table {
+  display: grid;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.table-cell {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-right: 1px solid color-mix(in srgb, var(--branch-color) 45%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--branch-color) 45%, transparent);
+  overflow: hidden;
+}
+
+.node.table-node.depth-0 {
+  border-color: var(--root-table-color);
+}
+
+.node.table-node.depth-0 .table-cell {
+  border-right-color: color-mix(in srgb, var(--root-table-color) 45%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--root-table-color) 45%, transparent);
+}
+
+.table-cell.last-column {
+  border-right: none;
+}
+
+.table-cell.last-row {
+  border-bottom: none;
+}
+
+.table-cell.editing {
+  background: var(--accent-soft);
+  cursor: text;
+}
+
+.cell-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* ---- 右クリックメニュー ---- */
+
+.context-menu {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: 13px var(--sans);
+}
+
+.context-menu-item {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not(:disabled),
+.context-menu-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.context-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
 /* ---- ドラッグ中のゴースト ---- */
 
 .drag-ghost {

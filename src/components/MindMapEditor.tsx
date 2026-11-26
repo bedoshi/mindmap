@@ -19,11 +19,13 @@ import {
   moveRoot,
   newId,
   nodeToSelectAfterRemove,
+  updateTableCell,
   updateText,
   visibleChildren,
 } from '../model/mindmap'
 import type { MindMap, NodeId } from '../model/types'
 import { XML_FILE_EXTENSION, mindMapToXml, titleOf, xmlToMindMap } from '../storage/xml'
+import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { MapListPanel } from './MapListPanel'
 import { NodeView } from './NodeView'
 import { Toolbar } from './Toolbar'
@@ -46,6 +48,23 @@ interface EditState {
   /** 編集開始時にテキスト全体を選択するか（既存テキストの編集時は true） */
   selectAll: boolean
 }
+
+/** テーブルノードのセルの編集状態 */
+interface CellEditState {
+  id: NodeId
+  row: number
+  column: number
+  draft: string
+}
+
+/**
+ * 右クリックメニューの対象。x / y はメニューの表示位置（ウィンドウ座標）。
+ * ノード上なら kind: 'node'（cell はテーブルノードのセル上で開いたときの位置）、
+ * 余白なら kind: 'canvas'（mapX / mapY は右クリックした位置のマップ座標）
+ */
+type ContextMenuState =
+  | { kind: 'node'; x: number; y: number; id: NodeId; cell: { row: number; column: number } | null }
+  | { kind: 'canvas'; x: number; y: number; mapX: number; mapY: number }
 
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; viewX: number; viewY: number }
@@ -84,6 +103,13 @@ function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
 }
 
+/** 要素がテーブルノードのセル（またはその中）なら、そのセルの位置を返す */
+function cellAt(element: HTMLElement): { row: number; column: number } | null {
+  const cell = element.closest<HTMLElement>('[data-row]')
+  if (!cell) return null
+  return { row: Number(cell.dataset.row), column: Number(cell.dataset.column) }
+}
+
 export function MindMapEditor({ initialMap, library }: Props) {
   const store = useMindMap(initialMap)
   const { map } = store
@@ -112,20 +138,35 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const [rootMove, setRootMove] = useState<RootMoveVisual | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [mapListOpen, setMapListOpen] = useState(false)
+  const [cellEdit, setCellEdit] = useState<CellEditState | null>(null)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
   // 選択中のノードが（Undo や新規作成で）消えた場合はルートを選択扱いにする。
   // 編集中のノードが消えた場合は編集を終了したものとして扱う。
   const selected =
     selectedId === null ? null : map.nodes[selectedId] ? selectedId : map.rootId
   const editing = edit !== null && map.nodes[edit.id] ? edit : null
+  // 編集中のセルが（Undo や行・列の削除で）無くなった場合は編集を終了したものとして扱う
+  const editingCell =
+    cellEdit !== null && map.nodes[cellEdit.id]?.table?.[cellEdit.row]?.[cellEdit.column] !== undefined
+      ? cellEdit
+      : null
+  const menu =
+    contextMenu !== null && (contextMenu.kind === 'canvas' || map.nodes[contextMenu.id])
+      ? contextMenu
+      : null
 
   // 編集中は入力中のテキストでレイアウトを計算し、幅が追従するようにする
   // ルートの移動中は仮の座標で計算し、ドロップ時に初めて履歴へ積む
   const layout = useMemo(() => {
     let displayMap = editing ? updateText(map, editing.id, editing.draft) : map
+    if (editingCell) {
+      const { id, row, column, draft } = editingCell
+      displayMap = updateTableCell(displayMap, id, row, column, draft)
+    }
     if (rootMove) displayMap = moveRoot(displayMap, rootMove.id, rootMove.x, rootMove.y)
     return computeLayout(displayMap)
-  }, [map, editing, rootMove])
+  }, [map, editing, editingCell, rootMove])
 
   // 初期表示でメインのルートを画面中央に置く
   useLayoutEffect(() => {
@@ -147,14 +188,67 @@ export function MindMapEditor({ initialMap, library }: Props) {
 
   // ---- 編集 ----
 
+  /** テーブルノードのセルの編集を始める */
+  const startCellEdit = useCallback(
+    (id: NodeId, row: number, column: number) => {
+      const text = map.nodes[id]?.table?.[row]?.[column]
+      if (text === undefined) return
+      setSelectedId(id)
+      setEdit(null)
+      setCellEdit({ id, row, column, draft: text })
+    },
+    [map],
+  )
+
+  /**
+   * ノードの編集を始める。テーブルノードの場合は先頭のセルを編集する
+   * （文字キーからの入力開始はテーブルノードでは行わない）
+   */
   const startEdit = useCallback(
     (id: NodeId, initialText?: string) => {
       const node = map.nodes[id]
       if (!node) return
+      if (node.table) {
+        if (initialText === undefined) startCellEdit(id, 0, 0)
+        return
+      }
       setSelectedId(id)
       setEdit({ id, draft: initialText ?? node.text, selectAll: initialText === undefined })
     },
-    [map],
+    [map, startCellEdit],
+  )
+
+  /** 確定する。blur が遅れて届いたとき別のセルを確定しないよう、対象のセル位置を照合する */
+  const commitCellEdit = useCallback(
+    (row: number, column: number) => {
+      if (!editingCell || editingCell.row !== row || editingCell.column !== column) return
+      setCellEdit(null)
+      store.setTableCell(editingCell.id, row, column, editingCell.draft.trim())
+    },
+    [editingCell, store],
+  )
+
+  const cancelCellEdit = useCallback(() => setCellEdit(null), [])
+
+  /** 確定して隣のセル（行の端では次 / 前の行）の編集に移る。表の端では確定だけする */
+  const commitCellAndMove = useCallback(
+    (backward: boolean) => {
+      if (!editingCell) return
+      const { id, row, column, draft } = editingCell
+      store.setTableCell(id, row, column, draft.trim())
+      const table = map.nodes[id]?.table
+      if (!table) return
+      const columns = table[0].length
+      const index = row * columns + column + (backward ? -1 : 1)
+      if (index < 0 || index >= table.length * columns) {
+        setCellEdit(null)
+        return
+      }
+      const nextRow = Math.floor(index / columns)
+      const nextColumn = index % columns
+      setCellEdit({ id, row: nextRow, column: nextColumn, draft: table[nextRow][nextColumn] })
+    },
+    [editingCell, map, store],
   )
 
   /** 空のまま確定・キャンセルされた末端ノードは削除する */
@@ -209,6 +303,18 @@ export function MindMapEditor({ initialMap, library }: Props) {
     [store],
   )
 
+  /** parentId の子にテーブルノードを追加し、先頭のセルを編集状態にする */
+  const addTableChild = useCallback(
+    (parentId: NodeId) => {
+      const id = newId()
+      store.addTableChild(parentId, id)
+      setSelectedId(id)
+      setEdit(null)
+      setCellEdit({ id, row: 0, column: 0, draft: '' })
+    },
+    [store],
+  )
+
   /** (x, y) を中心とするフローティングノードを作り、すぐ編集状態にする */
   const addFloating = useCallback(
     (x: number, y: number) => {
@@ -216,6 +322,18 @@ export function MindMapEditor({ initialMap, library }: Props) {
       store.addFloating(id, Math.round(x), Math.round(y))
       setSelectedId(id)
       setEdit({ id, draft: '', selectAll: false })
+    },
+    [store],
+  )
+
+  /** (x, y) を中心とするテーブルのフローティングノードを作り、先頭のセルを編集状態にする */
+  const addFloatingTable = useCallback(
+    (x: number, y: number) => {
+      const id = newId()
+      store.addFloatingTable(id, Math.round(x), Math.round(y))
+      setSelectedId(id)
+      setEdit(null)
+      setCellEdit({ id, row: 0, column: 0, draft: '' })
     },
     [store],
   )
@@ -390,7 +508,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (editing || e.isComposing) return
+      if (editing || editingCell || menu || e.isComposing) return
       if (
         e.target instanceof Element &&
         e.target.closest('input, textarea, select, [contenteditable="true"]')
@@ -481,6 +599,8 @@ export function MindMapEditor({ initialMap, library }: Props) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [
     editing,
+    editingCell,
+    menu,
     selected,
     store,
     addChild,
@@ -508,7 +628,9 @@ export function MindMapEditor({ initialMap, library }: Props) {
       const now = e.timeStamp
       if (last && last.id === id && now - last.time < DOUBLE_TAP_MS) {
         lastTapRef.current = null
-        startEdit(id)
+        const cell = cellAt(target)
+        if (cell) startCellEdit(id, cell.row, cell.column)
+        else startEdit(id)
         return
       }
       lastTapRef.current = { id, time: now, x: e.clientX, y: e.clientY }
@@ -612,7 +734,34 @@ export function MindMapEditor({ initialMap, library }: Props) {
       target.closest<HTMLElement>('[data-node-id]') ??
       document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-node-id]')
     const id = nodeEl?.dataset.nodeId
-    if (id && editing?.id !== id) startEdit(id)
+    if (!id || editing?.id === id) return
+    const cell = cellAt(target)
+    if (cell) startCellEdit(id, cell.row, cell.column)
+    else startEdit(id)
+  }
+
+  /**
+   * 右クリックでメニューを開く。ノード上ならノードのメニュー、余白ならその位置に作るメニュー。
+   * 入力欄の上ではブラウザ標準のメニューを使う
+   */
+  const handleContextMenu = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    if (target.closest('input, button, .toolbar')) return
+    e.preventDefault()
+    const id = target.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
+    if (id && map.nodes[id]) {
+      setSelectedId(id)
+      setContextMenu({ kind: 'node', x: e.clientX, y: e.clientY, id, cell: cellAt(target) })
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    setContextMenu({
+      kind: 'canvas',
+      x: e.clientX,
+      y: e.clientY,
+      mapX: (e.clientX - rect.left - view.x) / view.zoom,
+      mapY: (e.clientY - rect.top - view.y) / view.zoom,
+    })
   }
 
   /** pointerdown の直後に来る mousedown の既定動作（フォーカス移動）を、作成直後の 1 回だけ止める */
@@ -637,6 +786,71 @@ export function MindMapEditor({ initialMap, library }: Props) {
     }
     setNodeDrag(null)
     setRootMove(null)
+  }
+
+  // ---- 右クリックメニュー ----
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), [])
+
+  const contextMenuItems = (target: ContextMenuState): ContextMenuItem[] => {
+    if (target.kind === 'canvas') {
+      const { mapX, mapY } = target
+      return [
+        { kind: 'item', label: 'フローティングノードを追加', onSelect: () => addFloating(mapX, mapY) },
+        { kind: 'item', label: 'テーブルを追加', onSelect: () => addFloatingTable(mapX, mapY) },
+      ]
+    }
+    const { id } = target
+    const node = map.nodes[id]
+    const items: ContextMenuItem[] = [
+      { kind: 'item', label: '子ノードを追加', onSelect: () => addChild(id) },
+      { kind: 'item', label: '子にテーブルを追加', onSelect: () => addTableChild(id) },
+    ]
+    if (node.table) {
+      const { row, column } = target.cell ?? { row: 0, column: 0 }
+      const rows = node.table.length
+      const columns = node.table[0].length
+      items.push(
+        { kind: 'separator' },
+        { kind: 'item', label: 'セルを編集', onSelect: () => startCellEdit(id, row, column) },
+        { kind: 'separator' },
+        { kind: 'item', label: '上に行を追加', onSelect: () => store.insertTableRow(id, row) },
+        { kind: 'item', label: '下に行を追加', onSelect: () => store.insertTableRow(id, row + 1) },
+        {
+          kind: 'item',
+          label: '行を削除',
+          disabled: rows <= 1,
+          onSelect: () => store.removeTableRow(id, row),
+        },
+        { kind: 'separator' },
+        { kind: 'item', label: '左に列を追加', onSelect: () => store.insertTableColumn(id, column) },
+        {
+          kind: 'item',
+          label: '右に列を追加',
+          onSelect: () => store.insertTableColumn(id, column + 1),
+        },
+        {
+          kind: 'item',
+          label: '列を削除',
+          disabled: columns <= 1,
+          onSelect: () => store.removeTableColumn(id, column),
+        },
+      )
+    }
+    items.push(
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: node.table ? 'テーブルを削除' : 'ノードを削除',
+        disabled: id === map.rootId,
+        onSelect: () => {
+          const next = nodeToSelectAfterRemove(map, id) ?? node.parentId ?? map.rootId
+          store.remove(id)
+          setSelectedId(next)
+        },
+      },
+    )
+    return items
   }
 
   // ---- 描画 ----
@@ -699,6 +913,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
       >
         <div
           className="viewport"
@@ -735,19 +950,31 @@ export function MindMapEditor({ initialMap, library }: Props) {
                 onCancel={cancelEdit}
                 onTabFromEdit={commitAndAddChild}
                 onToggleCollapse={() => store.toggleCollapse(node.id)}
+                cellEdit={editingCell?.id === node.id ? editingCell : null}
+                onCellDraftChange={(text) =>
+                  setCellEdit((current) =>
+                    current?.id === node.id ? { ...current, draft: text } : current,
+                  )
+                }
+                onCellCommit={commitCellEdit}
+                onCellCancel={cancelCellEdit}
+                onCellTab={commitCellAndMove}
               />
             )
           })}
         </div>
         {nodeDrag && draggedNode && (
           <div className="drag-ghost" style={{ left: nodeDrag.x, top: nodeDrag.y }}>
-            {draggedNode.text || '（空）'}
+            {draggedNode.table ? '（テーブル）' : draggedNode.text || '（空）'}
           </div>
         )}
       </div>
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={contextMenuItems(menu)} onClose={closeContextMenu} />
+      )}
       <div className="help">
         Tab: 子を追加 / Enter: 兄弟を追加 / Delete: 削除 / F2・ダブルクリック: 編集 / 矢印キー: 移動 /
-        ドラッグ: 付け替え・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存
+        ドラッグ: 付け替え・ルートの移動 / 余白をダブルクリック: フローティングノード / ホイール: スクロール / Ctrl+ホイール: ズーム / Ctrl+S: 保存 / 右クリック: メニュー（テーブルの追加・行と列の編集）
       </div>
       {(message ?? errorMessage) && <div className="message">{message ?? errorMessage}</div>}
     </div>
