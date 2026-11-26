@@ -9,6 +9,7 @@ import {
   insertTableColumn,
   insertTableRow,
   moveNode,
+  moveNodeTo,
   moveRoot,
   removeNode,
   removeTableColumn,
@@ -16,8 +17,9 @@ import {
   toggleCollapse,
   updateTableCell,
   updateText,
+  type DropPosition,
 } from '../model/mindmap'
-import type { MindMap, NodeId } from '../model/types'
+import type { MindMap, NodeId, Side } from '../model/types'
 
 /**
  * 開いている 1 つのマインドマップの状態管理。
@@ -40,6 +42,7 @@ type EditAction =
   | { type: 'remove'; id: NodeId }
   | { type: 'toggleCollapse'; id: NodeId }
   | { type: 'move'; id: NodeId; parentId: NodeId; index?: number }
+  | { type: 'moveTo'; id: NodeId; targetId: NodeId; position: DropPosition; side?: Side }
   | { type: 'moveRoot'; id: NodeId; x: number; y: number }
   | { type: 'addTableChild'; parentId: NodeId; id: NodeId }
   | { type: 'addFloatingTable'; id: NodeId; x: number; y: number }
@@ -68,6 +71,8 @@ function applyEdit(map: MindMap, action: EditAction): MindMap {
       return toggleCollapse(map, action.id)
     case 'move':
       return moveNode(map, action.id, action.parentId, action.index)
+    case 'moveTo':
+      return moveNodeTo(map, action.id, action.targetId, action.position, action.side)
     case 'moveRoot':
       return moveRoot(map, action.id, action.x, action.y)
     case 'addTableChild':
@@ -150,6 +155,11 @@ export function useMindMap(initialMap: MindMap) {
       dispatch({ type: 'move', id, parentId, index }),
     [],
   )
+  const moveTo = useCallback(
+    (id: NodeId, targetId: NodeId, position: DropPosition, side?: Side) =>
+      dispatch({ type: 'moveTo', id, targetId, position, side }),
+    [],
+  )
   const moveRootTo = useCallback(
     (id: NodeId, x: number, y: number) => dispatch({ type: 'moveRoot', id, x, y }),
     [],
@@ -198,6 +208,7 @@ export function useMindMap(initialMap: MindMap) {
     remove,
     toggleCollapse: toggle,
     move,
+    moveTo,
     moveRoot: moveRootTo,
     addTableChild: addTable,
     addFloatingTable: addFloatingTableNode,

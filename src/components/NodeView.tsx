@@ -4,6 +4,12 @@ import type { MindMapNode } from '../model/types'
 import { HighlightedText } from './HighlightedText'
 import { TableContent, type CellDraft } from './TableContent'
 
+/**
+ * ドラッグ中のノードをこのノードに落としたときの置き方の表示。
+ * before / after: 前・後ろの兄弟、child: 子、left / right: ルートの左側・右側の子
+ */
+export type DropIndicator = 'before' | 'after' | 'child' | 'left' | 'right'
+
 interface Props {
   node: MindMapNode
   layout: NodeLayout
@@ -13,7 +19,7 @@ interface Props {
   /** 編集開始時にテキスト全体を選択するか */
   selectAllOnFocus: boolean
   dragging: boolean
-  dropTarget: boolean
+  dropIndicator: DropIndicator | null
   hiddenCount: number
   /** 検索中の検索語（一致部分をハイライトする）。検索していなければ null */
   searchQuery: string | null
@@ -40,7 +46,7 @@ export function NodeView({
   draft,
   selectAllOnFocus,
   dragging,
-  dropTarget,
+  dropIndicator,
   hiddenCount,
   searchQuery,
   searchCurrent,
@@ -86,7 +92,10 @@ export function NodeView({
   if (selected) classes.push('selected')
   if (editing || cellEdit) classes.push('editing')
   if (dragging) classes.push('dragging')
-  if (dropTarget) classes.push('drop-target')
+  if (dropIndicator === 'child' || dropIndicator === 'left' || dropIndicator === 'right') {
+    classes.push('drop-target')
+  }
+  if (dropIndicator && dropIndicator !== 'child') classes.push(`drop-${dropIndicator}`)
   if (node.collapsed) classes.push('collapsed')
   if (node.table) classes.push('table-node')
   if (searchCurrent) classes.push('search-current')

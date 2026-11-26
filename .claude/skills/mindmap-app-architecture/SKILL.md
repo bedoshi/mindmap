@@ -39,7 +39,7 @@ src/
   index.css                CSS変数（ライト/ダーク）とリセット
   model/
     types.ts               MindMap / MindMapNode などのデータ型
-    mindmap.ts             ツリー操作の純粋関数（追加・削除・移動・折りたたみなど）
+    mindmap.ts             ツリー操作の純粋関数（追加・削除・移動・並び替え・折りたたみなど）
     layout.ts              自動レイアウト計算（座標・接続線のパス・枝の色）
     search.ts              マップ内検索（一致するノードの列挙、ハイライト用のテキスト分割）
   storage/
@@ -138,7 +138,10 @@ src/
 ## 描画と操作（`src/components/MindMapEditor.tsx`）
 
 - キャンバスは `overflow: hidden` の `.canvas` の中に、`transform: translate(...) scale(...)` を当てた `.viewport` を置き、その中に接続線用の SVG（`overflow: visible`）と絶対配置したノード（HTML）を並べる構成。SVG と HTML を同じ transform 配下に置くことでパン/ズームを 1 箇所で扱う。
-- ポインタ操作は `.canvas` の Pointer Events でまとめて処理する（背景ドラッグ＝パン、ノードドラッグ＝付け替え、根のドラッグ＝座標移動）。
+- ポインタ操作は `.canvas` の Pointer Events でまとめて処理する（背景ドラッグ＝パン、ノードドラッグ＝付け替え・並び替え・左右の入れ替え、根のドラッグ＝座標移動）。
+- ノードのドロップ先は `DropTarget`（ドロップ先 ID・`DropPosition`（`before` / `after` / `child`）・ルートのときの `side`）で表す。`pointermove` でヒットしたノード要素の矩形に対するポインタ位置から決め（上下 30% は兄弟、ルートは左右の半分で側）、`mindmap.ts` の `moveNodeTo` が同じ参照を返す（変化なし・子孫への移動）なら無効にする。ドロップ時は `moveNodeTo` を 1 回だけ履歴に積む。
+- `moveNode` の `index` は、移動するノードを取り除いたあとの兄弟の並びでの位置。`side` を省略したとき、同じルートの中の移動なら今の側を保ち、別の親からの移動なら `pickSide` で決める。並びも側も変わらない移動は同じ参照を返す。
+- ドロップ位置の表示は `NodeView` の `dropIndicator`（`before` / `after` / `child` / `left` / `right`）で、CSS の `.drop-target`（枠）と `.drop-before` などの `::before`（線）で描く。
 - 根のドラッグ中は `rootMove`（仮の座標）をローカル state に持ち、`moveRoot` した MindMap でレイアウトを計算して表示する。履歴に積むのはドロップ時の 1 回だけ（座標は整数に丸める）。
 - 余白のダブルクリックも自前判定（pointerdown の間隔と位置）で、フローティングノードを作って編集状態にする。作成直後の mousedown の既定動作（フォーカス移動）を `keepFocusRef` で 1 回止めないと、入力欄が即座に blur されて空のまま消えてしまう。`setPointerCapture` を使うため `dblclick` がノード要素に届かないことがあり、ダブルクリックは pointerdown の間隔で自前判定している（`dblclick` もフォールバックで処理）。
 - ドロップ先の判定は `document.elementFromPoint` で `[data-node-id]` を探す。ゴースト要素は `pointer-events: none`。
@@ -164,6 +167,6 @@ src/
 - テストの書き方の方針:
   - 純粋関数（`model/`、`storage/xml.ts`）は入出力で検証する。「変更が無ければ同じ参照を返す」という約束も `toBe` で検証している。
   - hook は `renderHook` + `act`。`useMapLibrary` は `MapStorage` をメモリ実装のテストダブルに差し替えて検証する。デバウンス保存は実時間で待つ（`waitFor` の timeout を延長）。
-  - `MindMapEditor` は `MapLibrary` 型のモックを渡し、キーボード操作（Tab / Enter / Delete / Ctrl+S）とツールバー・一覧パネル・右クリックメニュー（`user.pointer({ keys: '[MouseRight]' })`）・セル編集の操作をユーザー視点で検証する。ノードのドラッグは jsdom に `elementFromPoint` が無いためテストしていない。
+  - `MindMapEditor` は `MapLibrary` 型のモックを渡し、キーボード操作（Tab / Enter / Delete / Ctrl+S）とツールバー・一覧パネル・右クリックメニュー（`user.pointer({ keys: '[MouseRight]' })`）・セル編集の操作をユーザー視点で検証する。ノードのドラッグは jsdom に `elementFromPoint` が無いためテストしていない（並び替え・左右の入れ替えの判定は `moveNodeTo` の単体テストで検証し、実際のドラッグは Chromium で確認する）。
   - 画像書き出し（`src/export/`）: 画像サイズの計算は入出力で、描画は呼び出しを記録する偽の Canvas コンテキスト（Proxy）で検証する。jsdom には Canvas の実装が無い（`getContext` は null を返すモック）ので、実際の見た目は Chromium で目視確認すること。保存先の切り替えは `window.mindmapApi` を差し替えて検証する。
   - Electron のメインプロセス（`main.ts` / `menu.ts` / `preload.ts`）は Electron 本体に依存するためテスト対象外。ファイル入出力（`mapFiles.ts`）は一時ディレクトリと `MINDMAP_DATA_DIR` で検証する。
