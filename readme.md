@@ -17,13 +17,26 @@ MindMeister 風のマインドマップアプリケーション。React + Vite +
 | ビルド・起動などのコマンド | [.claude/skills/mindmap-app-commands/SKILL.md](./.claude/skills/mindmap-app-commands/SKILL.md) |
 | 開発ルール（ドキュメント更新・コミット・コミュニケーション） | [CLAUDE.md](./CLAUDE.md) |
 
+## 環境構築
+
+パッケージマネージャーには [pnpm](https://pnpm.io/ja/) を使う。Node.js（LTS 版）と pnpm をインストールしてから、次の手順で進める。
+
+```bash
+# pnpm が未インストールの場合（Node.js 付属の Corepack を使う例）
+corepack enable pnpm
+
+# 依存パッケージのインストール
+pnpm install
+```
+
+Electron 版を使う場合、pnpm 10 以降は依存パッケージのインストール後スクリプトを既定で実行しないため、Electron 本体が取得されないことがある。`pnpm dev:electron` で Electron が見つからないというエラーになったら、`pnpm approve-builds` で `electron`（パッケージ作成も行うなら `electron-builder` なども）を許可してから、`pnpm install` をやり直す。
+
 ## クイックスタート
 
 ```bash
-npm install
-npm run dev            # Web 版を開発サーバーで起動（http://localhost:5173）
-npm run dev:electron   # Electron 版を開発モードで起動
+pnpm dev               # Web 版を開発サーバーで起動（http://localhost:5173）
+pnpm dev:electron      # Electron 版を開発モードで起動
 ```
 
-本番ビルドは `npm run build`（Web 版 → `dist/`）、`npm run build:electron`（Electron 版 → `out/`）。
-単体テストは `npm run test:run`（Vitest）。
+本番ビルドは `pnpm build`（Web 版 → `dist/`）、`pnpm build:electron`（Electron 版 → `out/`）。
+単体テストは `pnpm test:run`（Vitest）。
