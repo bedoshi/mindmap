@@ -31,10 +31,28 @@ pnpm package         # build:electron のあと electron-builder でインスト
 
 ## リリース（GitHub Releases）
 
+進め方（確認の順番・ブランチ・PR）は `CLAUDE.md` の「リリース手順ルール」に従う。コマンドは次のとおり。
+
 ```bash
-# package.json の version を更新してコミットしたあと、v<version> のタグを push する
-git tag v0.1.0
-git push origin v0.1.0
+# 前回のタグ以降に main へ入った変更と、未マージの PR を確認する
+git fetch origin --tags
+git log v0.3.0..origin/main --first-parent --oneline
+gh pr list --state open
+
+# バージョンの更新が必要なら release ブランチで PR にする
+git checkout main && git pull --ff-only
+git checkout -b release/v0.4.0
+# package.json の version を更新してコミット → push → gh pr create
+
+# PR のマージ後、main の CI の成功を確かめてからタグを push する
+git checkout main && git pull --ff-only
+git tag v0.4.0
+git push origin v0.4.0
+
+# リリース用ワークフローの完了を待ち、Release を確認して説明を差し替える
+gh run watch <run-id> --exit-status
+gh release view v0.4.0
+gh release edit v0.4.0 --notes-file <説明のファイル>
 ```
 
 - `.github/workflows/release.yml` が `v*` タグの push で起動し、Windows 上で lint・型チェック・テスト → `build:electron` → `electron-builder --publish never` を実行して、`release/` 内の `*.exe`・`*.exe.blockmap`・`latest.yml` を GitHub Release に添付する。
