@@ -5,6 +5,7 @@ import {
   addSibling,
   addFloatingTable,
   addTableChild,
+  expandAncestors,
   insertTableColumn,
   insertTableRow,
   moveNode,
@@ -42,6 +43,7 @@ type EditAction =
   | { type: 'moveRoot'; id: NodeId; x: number; y: number }
   | { type: 'addTableChild'; parentId: NodeId; id: NodeId }
   | { type: 'addFloatingTable'; id: NodeId; x: number; y: number }
+  | { type: 'expandAncestors'; id: NodeId }
   | { type: 'updateTableCell'; id: NodeId; row: number; column: number; text: string }
   | { type: 'insertTableRow'; id: NodeId; index: number }
   | { type: 'removeTableRow'; id: NodeId; index: number }
@@ -70,6 +72,8 @@ function applyEdit(map: MindMap, action: EditAction): MindMap {
       return moveRoot(map, action.id, action.x, action.y)
     case 'addTableChild':
       return addTableChild(map, action.parentId, action.id)
+    case 'expandAncestors':
+      return expandAncestors(map, action.id)
     case 'addFloatingTable':
       return addFloatingTable(map, action.id, action.x, action.y)
     case 'updateTableCell':
@@ -179,6 +183,7 @@ export function useMindMap(initialMap: MindMap) {
     (id: NodeId, index: number) => dispatch({ type: 'removeTableColumn', id, index }),
     [],
   )
+  const reveal = useCallback((id: NodeId) => dispatch({ type: 'expandAncestors', id }), [])
   const undo = useCallback(() => dispatch({ type: 'undo' }), [])
   const redo = useCallback(() => dispatch({ type: 'redo' }), [])
 
@@ -196,6 +201,7 @@ export function useMindMap(initialMap: MindMap) {
     moveRoot: moveRootTo,
     addTableChild: addTable,
     addFloatingTable: addFloatingTableNode,
+    expandAncestors: reveal,
     setTableCell,
     insertTableRow: insertRow,
     removeTableRow: removeRow,

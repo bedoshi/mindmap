@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { splitLines, type TableLayout } from '../model/layout'
+import { HighlightedText } from './HighlightedText'
 
 /** 編集中のセルの位置と入力中のテキスト */
 export interface CellDraft {
@@ -13,6 +14,8 @@ interface Props {
   layout: TableLayout
   /** 編集中のセル。編集していなければ null */
   cellEdit: CellDraft | null
+  /** 検索中の検索語（一致部分をハイライトする）。検索していなければ null */
+  searchQuery: string | null
   onDraftChange: (text: string) => void
   /** 編集の確定。blur が遅れて届いた場合に別のセルを確定しないよう、対象のセル位置を渡す */
   onCommit: (row: number, column: number) => void
@@ -26,6 +29,7 @@ export function TableContent({
   table,
   layout,
   cellEdit,
+  searchQuery,
   onDraftChange,
   onCommit,
   onCancel,
@@ -97,7 +101,9 @@ export function TableContent({
                   spellCheck={false}
                 />
               ) : (
-                <span className="cell-text">{cell}</span>
+                <span className="cell-text">
+                  <HighlightedText text={cell} query={searchQuery} />
+                </span>
               )}
             </div>
           )

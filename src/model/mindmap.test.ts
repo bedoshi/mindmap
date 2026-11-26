@@ -10,6 +10,7 @@ import {
   countSubtree,
   createMindMap,
   createTable,
+  expandAncestors,
   insertTableColumn,
   insertTableRow,
   isDescendant,
@@ -421,5 +422,31 @@ describe('テーブルノード', () => {
     expect(single.nodes['t'].table).toEqual([['d']])
     expect(removeTableRow(single, 't', 0)).toBe(single)
     expect(removeTableColumn(single, 't', 0)).toBe(single)
+  })
+})
+
+describe('expandAncestors', () => {
+  it('折りたたまれている祖先をすべて展開する。自分自身の折りたたみは変えない', () => {
+    let map = createMindMap('中心')
+    map = addChild(map, map.rootId, 'a', 'A')
+    map = addChild(map, 'a', 'b', 'B')
+    map = addChild(map, 'b', 'c', 'C')
+    map = addChild(map, 'c', 'd', 'D')
+    map = toggleCollapse(toggleCollapse(toggleCollapse(map, 'a'), 'b'), 'c')
+
+    const next = expandAncestors(map, 'c')
+
+    expect(next.nodes['a'].collapsed).toBe(false)
+    expect(next.nodes['b'].collapsed).toBe(false)
+    expect(next.nodes['c'].collapsed).toBe(true)
+  })
+
+  it('展開する祖先が無ければ同じ参照を返す', () => {
+    let map = createMindMap('中心')
+    map = addChild(map, map.rootId, 'a', 'A')
+
+    expect(expandAncestors(map, 'a')).toBe(map)
+    expect(expandAncestors(map, map.rootId)).toBe(map)
+    expect(expandAncestors(map, 'missing')).toBe(map)
   })
 })

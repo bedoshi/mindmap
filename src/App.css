@@ -243,6 +243,81 @@
   font: inherit;
 }
 
+/* ---- マップ内検索 ---- */
+
+.search-bar {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.search-input {
+  width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-status {
+  min-width: 52px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.search-bar button {
+  min-width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.search-bar button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.search-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/*
+ * 検索語に一致した部分。ノードの色やダークモードに関わらず黄色地に濃い文字で表示する。
+ * padding を付けるとレイアウト計算上の幅とずれるので付けない
+ */
+.search-hit {
+  border-radius: 2px;
+  background: #fff176;
+  color: #1f2430;
+}
+
+/* 表示中の検索結果のノードは、一致部分を濃い黄色にして区別する */
+.node.search-current .search-hit {
+  background: #ffd600;
+}
+
 /* ---- 右クリックメニュー ---- */
 
 .context-menu {
