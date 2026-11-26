@@ -148,4 +148,5 @@
 - **経緯**: 「pnpm を使う変更を用意している。readme に pnpm を使った環境構築の手順を追加してほしい」という依頼による。
 - **補足**:
   - `package.json` の `package` スクリプト内部の `npm run build:electron` は変更していない（`pnpm package` からも動作する）。
-  - pnpm 10 以降は依存のインストール後スクリプトを既定で実行しないため、Electron 本体が取得されない場合は `pnpm approve-builds` で許可する（readme に記載）。
+  - pnpm 10 以降は依存のインストール後スクリプトを既定で実行せず、Electron 本体が取得されない。`package.json` の `pnpm.onlyBuiltDependencies` に `electron` と `esbuild` を指定して許可している。
+  - リリース用ワークフロー（`.github/workflows/release.yml`）も `npm ci` から `pnpm install --frozen-lockfile` に変更した（`package-lock.json` を削除したため、そのままではタグ push 時のビルドが失敗する）。

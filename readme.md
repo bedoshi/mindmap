@@ -29,7 +29,7 @@ corepack enable pnpm
 pnpm install
 ```
 
-Electron 版を使う場合、pnpm 10 以降は依存パッケージのインストール後スクリプトを既定で実行しないため、Electron 本体が取得されないことがある。`pnpm dev:electron` で Electron が見つからないというエラーになったら、`pnpm approve-builds` で `electron`（パッケージ作成も行うなら `electron-builder` なども）を許可してから、`pnpm install` をやり直す。
+pnpm 10 以降は依存パッケージのインストール後スクリプトを既定で実行しないが、Electron 本体の取得に必要な `electron` と `esbuild` は `package.json` の `pnpm.onlyBuiltDependencies` で許可済みなので、追加の操作は要らない。
 
 ## クイックスタート
 
