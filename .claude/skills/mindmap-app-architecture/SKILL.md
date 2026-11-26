@@ -143,7 +143,7 @@ src/
 - `moveNode` の `index` は、移動するノードを取り除いたあとの兄弟の並びでの位置。`side` を省略したとき、同じルートの中の移動なら今の側を保ち、別の親からの移動なら `pickSide` で決める。並びも側も変わらない移動は同じ参照を返す。
 - ドロップ位置の表示は `NodeView` の `dropIndicator`（`before` / `after` / `child` / `left` / `right`）で、CSS の `.drop-target`（枠）と `.drop-before` などの `::before`（線）で描く。
 - 根のドラッグ中は `rootMove`（仮の座標）をローカル state に持ち、`moveRoot` した MindMap でレイアウトを計算して表示する。履歴に積むのはドロップ時の 1 回だけ（座標は整数に丸める）。
-- 余白のダブルクリックも自前判定（pointerdown の間隔と位置）で、フローティングノードを作って編集状態にする。作成直後の mousedown の既定動作（フォーカス移動）を `keepFocusRef` で 1 回止めないと、入力欄が即座に blur されて空のまま消えてしまう。`setPointerCapture` を使うため `dblclick` がノード要素に届かないことがあり、ダブルクリックは pointerdown の間隔で自前判定している（`dblclick` もフォールバックで処理）。
+- 余白のダブルクリックも自前判定（pointerdown の間隔と位置）で、フローティングノードを作って編集状態にする。作成直後の mousedown の既定動作（フォーカス移動）を `keepFocusRef` で 1 回止めないと、入力欄が即座に blur されて空のまま消えてしまう。ノード・セルのダブルクリックで編集を始めるときも同じく `keepFocusRef` で直後の mousedown を止める（止めないと、入力欄の `select()` による全選択が mousedown の既定動作で解除される）。`setPointerCapture` を使うため `dblclick` がノード要素に届かないことがあり、ダブルクリックは pointerdown の間隔で自前判定している（`dblclick` もフォールバックで処理）。
 - ドロップ先の判定は `document.elementFromPoint` で `[data-node-id]` を探す。ゴースト要素は `pointer-events: none`。
 - ホイールイベントは `preventDefault` が必要なため React の `onWheel` ではなく `addEventListener('wheel', ..., { passive: false })` で登録している。
 - キーボードショートカットは `window` の `keydown` で処理し、編集中（input にフォーカスがある間）・セル編集中・右クリックメニュー表示中は無効化する。IME 変換中（`isComposing`）の Enter は確定扱いにしない。

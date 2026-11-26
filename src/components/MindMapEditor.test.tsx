@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { MapLibrary } from '../hooks/useMapLibrary'
@@ -157,6 +157,55 @@ describe('MindMapEditor', () => {
     expect(floating).toMatchObject({ text: '浮遊', parentId: null })
     expect(typeof floating.x).toBe('number')
     expect(typeof floating.y).toBe('number')
+  })
+
+  /**
+   * ダブルクリックは pointerdown 2 回で判定する。user-event の dblClick は jsdom 上で、
+   * 2 回目の pointerdown で入れ替わった要素の代わりに body へフォーカスを移してしまう（ブラウザとは異なる）ため、
+   * イベントを直接送り、直後の mousedown の既定動作（フォーカス移動・文字の選択）が止められることを確かめる
+   */
+  function doubleTap(element: HTMLElement) {
+    fireEvent.pointerDown(element, { button: 0, pointerId: 1 })
+    fireEvent.pointerUp(element, { button: 0, pointerId: 1 })
+    fireEvent.pointerDown(element, { button: 0, pointerId: 1 })
+  }
+
+  it('ノードをダブルクリックすると既存のテキストが全選択された状態で編集が始まり、入力で置き換えられる', async () => {
+    const user = userEvent.setup()
+    const base = createMindMap('中心')
+    const map = addChild(base, base.rootId, 'a', '既存のテキスト')
+    const { library } = renderEditor(map)
+
+    doubleTap(screen.getByText('既存のテキスト'))
+
+    const input = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(input).toHaveFocus()
+    expect(input.value).toBe('既存のテキスト')
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, '既存のテキスト'.length])
+    // 続く mousedown の既定動作は止められ、全選択が保たれる
+    expect(fireEvent.mouseDown(input)).toBe(false)
+
+    await user.keyboard('新しい{Enter}')
+
+    expect(screen.getByText('新しい')).toBeInTheDocument()
+    expect(vi.mocked(library.reportChange).mock.lastCall?.[0].nodes.a.text).toBe('新しい')
+  })
+
+  it('テーブルのセルをダブルクリックすると、セルの内容が全選択された状態で編集が始まる', () => {
+    const base = createMindMap('中心')
+    const map = addTableChild(base, base.rootId, 't', [
+      ['項目', '値'],
+      ['x', 'y'],
+    ])
+    renderEditor(map)
+
+    doubleTap(screen.getByText('項目'))
+
+    const input = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(input).toHaveFocus()
+    expect(input.value).toBe('項目')
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, '項目'.length])
+    expect(fireEvent.mouseDown(input)).toBe(false)
   })
 
   it('1 回のクリックではフローティングノードは作られず、作った直後に空のまま Esc すると取り消される', async () => {
