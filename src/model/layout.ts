@@ -14,15 +14,19 @@ export const ROOT_FONT =
   'bold 17px system-ui, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif'
 
 const H_PAD = 14
+/** 1 行のときのノードの高さ。2 行目以降は 1 行ごとに行の高さ（NODE_LINE_HEIGHT など）だけ高くなる */
 const NODE_HEIGHT = 34
 const ROOT_HEIGHT = 46
+/** テキストの行の高さ（複数行のとき 1 行あたりに足す高さ。描画側の line-height にも使う） */
+export const NODE_LINE_HEIGHT = 20
+export const ROOT_LINE_HEIGHT = 24
 const MIN_WIDTH = 60
 /** 親子間の水平距離 */
 const H_GAP = 56
 /** 兄弟間の垂直距離 */
 const V_GAP = 14
 
-/** テーブルノードの 1 行の高さ（セル下端の区切り線 1px を含む） */
+/** テーブルノードの 1 行の高さ（セル内が 1 行のとき。セル下端の区切り線 1px を含む） */
 export const TABLE_ROW_HEIGHT = 28
 /** テーブルのセルの左右の余白 */
 export const TABLE_CELL_PAD = 8
@@ -49,7 +53,10 @@ export type LayoutSide = Side | 'center'
 export interface TableLayout {
   /** 各列の幅（区切り線 1px を含む） */
   columnWidths: number[]
-  rowHeight: number
+  /** 各行の高さ（区切り線 1px を含む）。その行で一番行数の多いセルに合わせる */
+  rowHeights: number[]
+  /** セル内のテキストの行の高さ */
+  lineHeight: number
 }
 
 export interface NodeLayout {
@@ -62,6 +69,8 @@ export interface NodeLayout {
   color: string
   depth: number
   font: string
+  /** テキストの行の高さ（複数行のテキストの line-height） */
+  lineHeight: number
   /** テーブルノードのときのみ */
   table?: TableLayout
 }
@@ -104,17 +113,31 @@ interface NodeSize {
   width: number
   height: number
   font: string
+  lineHeight: number
   table?: TableLayout
+}
+
+/** テキストを行に分ける（改行は \n。\r\n / \r も 1 つの改行として扱う） */
+export function splitLines(text: string): string[] {
+  return text.split(/\r\n|\r|\n/)
+}
+
+/** 複数行のテキストの幅（一番長い行の幅） */
+function measureLinesWidth(lines: string[], font: string): number {
+  return Math.max(0, ...lines.map((line) => Math.ceil(measureTextWidth(line, font)) + 2))
 }
 
 export function measureNode(text: string, isRoot: boolean): NodeSize {
   const font = isRoot ? ROOT_FONT : NODE_FONT
-  // 丸め誤差で末尾が欠けないよう少し余裕を持たせる
-  const textWidth = Math.ceil(measureTextWidth(text, font)) + 2
+  const lineHeight = isRoot ? ROOT_LINE_HEIGHT : NODE_LINE_HEIGHT
+  const lines = splitLines(text)
+  // 丸め誤差で末尾が欠けないよう少し余裕を持たせる（measureLinesWidth で +2 している）
+  const textWidth = measureLinesWidth(lines, font)
   return {
     width: Math.max(MIN_WIDTH, textWidth + H_PAD * 2),
-    height: isRoot ? ROOT_HEIGHT : NODE_HEIGHT,
+    height: (isRoot ? ROOT_HEIGHT : NODE_HEIGHT) + (lines.length - 1) * lineHeight,
     font,
+    lineHeight,
   }
 }
 
@@ -124,16 +147,22 @@ export function measureTable(table: string[][]): NodeSize {
   const columnWidths = Array.from({ length: columnCount }, (_, column) => {
     const textWidth = Math.max(
       0,
-      ...table.map((cells) => Math.ceil(measureTextWidth(cells[column] ?? '', NODE_FONT)) + 2),
+      ...table.map((cells) => measureLinesWidth(splitLines(cells[column] ?? ''), NODE_FONT)),
     )
     return Math.max(TABLE_MIN_COLUMN_WIDTH, textWidth + TABLE_CELL_PAD * 2 + 1)
   })
+  const rowHeights = table.map((cells) => {
+    const lineCount = Math.max(1, ...cells.map((cell) => splitLines(cell).length))
+    return TABLE_ROW_HEIGHT + (lineCount - 1) * NODE_LINE_HEIGHT
+  })
   const innerWidth = columnWidths.reduce((sum, w) => sum + w, 0)
+  const innerHeight = rowHeights.reduce((sum, h) => sum + h, 0)
   return {
     width: innerWidth + TABLE_BORDER * 2,
-    height: table.length * TABLE_ROW_HEIGHT + TABLE_BORDER * 2,
+    height: innerHeight + TABLE_BORDER * 2,
     font: NODE_FONT,
-    table: { columnWidths, rowHeight: TABLE_ROW_HEIGHT },
+    lineHeight: NODE_LINE_HEIGHT,
+    table: { columnWidths, rowHeights, lineHeight: NODE_LINE_HEIGHT },
   }
 }
 
@@ -196,6 +225,7 @@ export function computeLayout(map: MindMap): Layout {
       color,
       depth,
       font: size.font,
+      lineHeight: size.lineHeight,
     }
     if (size.table) nodes[id].table = size.table
     const children = visibleChildren(map, id)
@@ -222,6 +252,7 @@ export function computeLayout(map: MindMap): Layout {
       color: ROOT_COLOR,
       depth: 0,
       font: rootSize.font,
+      lineHeight: rootSize.lineHeight,
     }
     if (rootSize.table) nodes[rootId].table = rootSize.table
 

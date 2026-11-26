@@ -168,6 +168,10 @@ describe('titleOf', () => {
     expect(titleOf(createMindMap('  計画  '))).toBe('計画')
   })
 
+  it('ルートのテキストが複数行なら、空行を除いた各行を空白でつないで 1 行にする', () => {
+    expect(titleOf(createMindMap(' 2026 年\n\n  計画 \r\n案'))).toBe('2026 年 計画 案')
+  })
+
   it('ルートのテキストが空なら「無題のマップ」を返す', () => {
     expect(titleOf(createMindMap(''))).toBe('無題のマップ')
   })
@@ -218,6 +222,26 @@ describe('テーブルノードの XML', () => {
     expect(map.nodes['t'].text).toBe('')
     expect(map.nodes['e'].table).toBeUndefined()
     expect(map.nodes['e'].text).toBe('空')
+  })
+
+  it('セル内の改行は &#10; で書き出し、読み込むと改行に戻る', () => {
+    const base = createMindMap('中心')
+    const map = addTableChild(base, base.rootId, 't', [['1 行目\n2 行目']])
+
+    const xml = mindMapToXml(map)
+
+    expect(xml).toContain('<row><cell>1 行目&#10;2 行目</cell></row>')
+    expect(xmlToMindMap(xml).nodes['t'].table).toEqual([['1 行目\n2 行目']])
+  })
+
+  it('ノードのテキストの改行も書き出し・読み込みで元に戻る', () => {
+    const base = createMindMap('中心')
+    const map = addChild(base, base.rootId, 'c', '上の行\n下の行')
+
+    const xml = mindMapToXml(map)
+
+    expect(xml).toContain('text="上の行&#10;下の行"')
+    expect(xmlToMindMap(xml).nodes['c'].text).toBe('上の行\n下の行')
   })
 
   it('テーブルのフローティングノードも書き出し・読み込みで元に戻る', () => {

@@ -618,7 +618,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     const target = e.target as HTMLElement
-    if (target.closest('input, button, .toolbar')) return
+    if (target.closest('input, textarea, button, .toolbar')) return
     const nodeEl = target.closest<HTMLElement>('[data-node-id]')
     if (nodeEl) {
       const id = nodeEl.dataset.nodeId!
@@ -729,7 +729,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
   /** pointerdown が1回しか発火しない環境向けの保険として、dblclick でも編集を開始する */
   const handleDoubleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
-    if (target.closest('input, button, .toolbar')) return
+    if (target.closest('input, textarea, button, .toolbar')) return
     const nodeEl =
       target.closest<HTMLElement>('[data-node-id]') ??
       document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-node-id]')
@@ -746,7 +746,7 @@ export function MindMapEditor({ initialMap, library }: Props) {
    */
   const handleContextMenu = (e: ReactMouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
-    if (target.closest('input, button, .toolbar')) return
+    if (target.closest('input, textarea, button, .toolbar')) return
     e.preventDefault()
     const id = target.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
     if (id && map.nodes[id]) {

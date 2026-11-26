@@ -1,4 +1,4 @@
-import { computeLayout } from '../model/layout'
+import { computeLayout, splitLines } from '../model/layout'
 import { allRootIds, newId } from '../model/mindmap'
 import type { MindMap, MindMapNode, NodeId } from '../model/types'
 
@@ -46,6 +46,8 @@ function escapeText(value: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    // 改行も文字参照にして、1 行の row 要素が XML 上でも 1 行に収まるようにする
+    .replaceAll('\n', '&#10;')
     .replaceAll('\r', '&#13;')
 }
 
@@ -182,7 +184,14 @@ export function xmlToMindMap(xml: string): MindMap {
   return { rootId, floatingRootIds, nodes }
 }
 
-/** 一覧表示などに使うマップのタイトル（ルートノードのテキスト） */
+/**
+ * 一覧表示や書き出しのファイル名に使うマップのタイトル（ルートノードのテキスト）。
+ * ルートのテキストが複数行のときは、各行の前後の空白を除いて空白 1 つでつなぎ、1 行にする
+ */
 export function titleOf(map: MindMap): string {
-  return map.nodes[map.rootId]?.text.trim() || '無題のマップ'
+  const text = map.nodes[map.rootId]?.text ?? ''
+  const lines = splitLines(text)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+  return lines.join(' ') || '無題のマップ'
 }

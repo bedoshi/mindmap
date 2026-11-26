@@ -4,7 +4,9 @@ import {
   computeLayout,
   measureNode,
   measureTable,
+  NODE_LINE_HEIGHT,
   ROOT_COLOR,
+  splitLines,
   TABLE_BORDER,
   TABLE_MIN_COLUMN_WIDTH,
   TABLE_ROW_HEIGHT,
@@ -171,6 +173,31 @@ describe('computeLayout（フローティングノード・ルートの移動）
 
     expect(layout.bounds.maxX).toBeGreaterThan(1000)
     expect(layout.bounds.maxY).toBeGreaterThan(800)
+  })
+})
+
+describe('複数行のテキスト', () => {
+  it('splitLines は \\n・\\r\\n・\\r のいずれでも行に分ける', () => {
+    expect(splitLines('a\nb\r\nc\rd')).toEqual(['a', 'b', 'c', 'd'])
+    expect(splitLines('')).toEqual([''])
+  })
+
+  it('改行を含むノードは行数に応じて高くなり、幅は一番長い行に合わせる', () => {
+    const one = measureNode('短い', false)
+    const three = measureNode('短い\n一番長い行のテキスト\n中', false)
+
+    expect(three.height).toBe(one.height + NODE_LINE_HEIGHT * 2)
+    expect(three.width).toBe(measureNode('一番長い行のテキスト', false).width)
+  })
+
+  it('テーブルの行の高さは、その行で一番行数の多いセルに合わせる', () => {
+    const size = measureTable([
+      ['1 行', '1\n2\n3'],
+      ['a', 'b'],
+    ])
+
+    expect(size.table?.rowHeights).toEqual([TABLE_ROW_HEIGHT + NODE_LINE_HEIGHT * 2, TABLE_ROW_HEIGHT])
+    expect(size.height).toBe(TABLE_ROW_HEIGHT * 2 + NODE_LINE_HEIGHT * 2 + TABLE_BORDER * 2)
   })
 })
 

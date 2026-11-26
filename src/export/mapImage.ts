@@ -3,6 +3,7 @@ import {
   TABLE_BORDER,
   TABLE_CELL_PAD,
   computeLayout,
+  splitLines,
   type Bounds,
   type Layout,
   type NodeLayout,
@@ -81,6 +82,19 @@ export function computeImageSize(
   }
 }
 
+/** 複数行のテキストを、中心の y 座標が centerY になるよう 1 行ずつ描く（textBaseline は middle の前提） */
+function fillLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  centerY: number,
+  lineHeight: number,
+): void {
+  const lines = splitLines(text)
+  const firstY = centerY - ((lines.length - 1) * lineHeight) / 2
+  lines.forEach((line, i) => ctx.fillText(line, x, firstY + i * lineHeight))
+}
+
 /** テーブルノードを描く。画面と同じく深さに関わらず白地 + 枝の色の枠線で、セルの文字は左寄せ */
 function drawTableNode(ctx: CanvasRenderingContext2D, table: string[][], node: NodeLayout): void {
   const { x, y, width, height } = node
@@ -104,8 +118,15 @@ function drawTableNode(ctx: CanvasRenderingContext2D, table: string[][], node: N
     columnX += w
     ctx.fillRect(columnX - 1, innerY, 1, innerHeight)
   })
+  // 各行の上端の y 座標
+  const rowTops: number[] = []
+  let rowY = innerY
+  for (const h of tableLayout.rowHeights) {
+    rowTops.push(rowY)
+    rowY += h
+  }
   for (let row = 1; row < table.length; row++) {
-    ctx.fillRect(innerX, innerY + row * tableLayout.rowHeight - 1, innerWidth, 1)
+    ctx.fillRect(innerX, rowTops[row] - 1, innerWidth, 1)
   }
   ctx.globalAlpha = 1
 
@@ -114,18 +135,21 @@ function drawTableNode(ctx: CanvasRenderingContext2D, table: string[][], node: N
   ctx.textBaseline = 'middle'
   ctx.fillStyle = TEXT_COLOR
   table.forEach((cells, row) => {
+    const rowHeight = tableLayout.rowHeights[row]
     let cellX = innerX
     cells.forEach((cell, column) => {
       const cellWidth = tableLayout.columnWidths[column]
       if (cell !== '') {
         ctx.save()
         ctx.beginPath()
-        ctx.rect(cellX, innerY + row * tableLayout.rowHeight, cellWidth - 1, tableLayout.rowHeight)
+        ctx.rect(cellX, rowTops[row], cellWidth - 1, rowHeight)
         ctx.clip()
-        ctx.fillText(
+        fillLines(
+          ctx,
           cell,
           cellX + TABLE_CELL_PAD,
-          innerY + row * tableLayout.rowHeight + (tableLayout.rowHeight - 1) / 2,
+          rowTops[row] + (rowHeight - 1) / 2,
+          tableLayout.lineHeight,
         )
         ctx.restore()
       }
@@ -173,7 +197,13 @@ function drawNode(ctx: CanvasRenderingContext2D, map: MindMap, node: NodeLayout)
   ctx.textBaseline = 'middle'
   ctx.fillStyle = depth >= 2 ? TEXT_COLOR : LIGHT_TEXT_COLOR
   ctx.globalAlpha = hasText ? 1 : PLACEHOLDER_ALPHA
-  ctx.fillText(hasText ? mapNode.text : PLACEHOLDER_TEXT, x + width / 2, y + height / 2)
+  fillLines(
+    ctx,
+    hasText ? mapNode.text : PLACEHOLDER_TEXT,
+    x + width / 2,
+    y + height / 2,
+    node.lineHeight,
+  )
   ctx.globalAlpha = 1
 
   drawCollapsedBadge(ctx, map, node)

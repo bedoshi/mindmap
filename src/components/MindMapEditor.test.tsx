@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MapLibrary } from '../hooks/useMapLibrary'
 import { addChild, addTableChild, createMindMap } from '../model/mindmap'
 import type { MindMap } from '../model/types'
+import { titleOf } from '../storage/xml'
 import { MindMapEditor } from './MindMapEditor'
 
 /** useMapLibrary のテストダブル。保存や一覧操作はすべてモック関数にする */
@@ -194,6 +195,61 @@ describe('MindMapEditor', () => {
     await user.click(screen.getByRole('button', { name: '画像書き出し' }))
 
     expect(await screen.findByText('画像の書き出しに失敗しました')).toBeInTheDocument()
+  })
+
+  describe('複数行のテキスト', () => {
+    it('子ノードの編集中に Shift+Enter を押すと改行され、Enter で確定する', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor()
+
+      await user.keyboard('{Tab}')
+      await user.type(screen.getByRole('textbox'), '1 行目{Shift>}{Enter}{/Shift}2 行目')
+      expect(screen.getByRole('textbox')).toHaveValue('1 行目\n2 行目')
+      await user.keyboard('{Enter}')
+
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(Object.values(reported!.nodes).map((n) => n.text)).toContain('1 行目\n2 行目')
+    })
+
+    it('フローティングノードでも Shift+Enter で改行できる', async () => {
+      const user = userEvent.setup()
+      const { library, container } = renderEditor()
+
+      await user.dblClick(container.querySelector('.canvas')!)
+      await user.type(screen.getByRole('textbox'), '上{Shift>}{Enter}{/Shift}下{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(reported!.nodes[reported!.floatingRootIds[0]].text).toBe('上\n下')
+    })
+
+    it('メインのルートでも Shift+Enter で改行でき、マップのタイトルは改行を空白にしたものになる', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor()
+
+      await user.keyboard('{F2}')
+      await user.type(screen.getByRole('textbox'), '{End}{Shift>}{Enter}{/Shift}2 行目{Enter}')
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      expect(reported!.nodes[reported!.rootId].text).toBe('中心\n2 行目')
+      expect(titleOf(reported!)).toBe('中心 2 行目')
+    })
+
+    it('テーブルのセルでも Shift+Enter で改行できる', async () => {
+      const user = userEvent.setup()
+      const { library } = renderEditor()
+
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByText('中心') })
+      await user.click(screen.getByRole('menuitem', { name: '子にテーブルを追加' }))
+      await user.type(
+        screen.getByRole('textbox', { name: 'セル 1 行 1 列' }),
+        '上{Shift>}{Enter}{/Shift}下{Enter}',
+      )
+
+      const reported = vi.mocked(library.reportChange).mock.lastCall?.[0]
+      const table = Object.values(reported!.nodes).find((n) => n.table)
+      expect(table?.table?.[0][0]).toBe('上\n下')
+    })
   })
 
   describe('右クリックメニューとテーブル', () => {
